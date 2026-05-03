@@ -1,0 +1,401 @@
+###############################################################################
+# Accelerator:  FabricCatalyst
+# Script Name:  MapMainFunction.ps1
+# Description:  Deploys Fabric items using a JSON map file for SQL-to-Fabric migration scenarios.
+# Author:       Svenchio — https://techtacofriday.com
+# Project:      https://fabriccatalyst.com
+# Usage:        If executed as a Stand-alone script:
+#               Step 1. Open a new PowerShell session from the root of the script
+#               Step 2. PS> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+#               Step 3  PS> .\MapMainFunction.ps1
+###############################################################################
+param
+(
+    [parameter(Mandatory = $false)] [String] $dataProduct,
+    [parameter(Mandatory = $false)] [String] $jsonMapFileName,
+    [parameter(Mandatory = $false)]
+    [ValidateSet("True", "False")] [String] $updateDefinition = "False",
+    [ValidateSet("AzureDevOps")]
+    [parameter(Mandatory = $false)] [String] $gitProviderType = "AzureDevOps",
+    [parameter(Mandatory = $false)] [String] $organizationName,
+    [parameter(Mandatory = $false)] [String] $projectName,
+    [parameter(Mandatory = $false)] [String] $repositoryName,
+    [parameter(Mandatory = $false)] [String] $sourceBranchName = "main",
+    [parameter(Mandatory = $false)] [String] $deploymentDirectoryPath,
+    [ValidateSet("LocalDirectory")]
+    [parameter(Mandatory = $false)] [String] $fabricItemsLocation = "LocalDirectory",
+    [parameter(Mandatory = $false)]
+    [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
+    [parameter(Mandatory = $false)] [Bool] $developerView = $false
+)
+
+#References to the API's
+$script:fabricBaseUrl = "https://api.fabric.microsoft.com"
+$script:powerbiBaseUrl = "https://api.powerbi.com/v1.0/myorg"
+$script:azdoBaseUrl = "https://dev.azure.com"
+$script:graphBaseUrl = "https://graph.microsoft.com/v1.0"
+
+$private = if (Test-Path "$PSScriptRoot\..\private") { "$PSScriptRoot\..\private" } else { "$PSScriptRoot\..\..\shared\private" }
+. "$private\SharedFunctions.ps1"
+. "$private\ConnectionFunctions.ps1"
+. "$private\CapacityFunctions.ps1"
+. "$private\DomainFunctions.ps1"
+. "$private\WorkspaceFunctions.ps1"
+. "$private\LakehouseFunctions.ps1"
+. "$private\WarehouseFunctions.ps1"
+. "$private\SqlDatabaseFunctions.ps1"
+. "$private\ItemFunctions.ps1"
+. "$private\GitFunctions.ps1"
+
+function New-MapItem {
+    param (
+        [parameter(Mandatory = $true)]  [psobject]       $item,
+        [parameter(Mandatory = $true)]  [String]         $type,
+        [parameter(Mandatory = $false)] [String]         $parent,
+        [parameter(Mandatory = $true)]  [PSCustomObject] $catalog,
+        [parameter(Mandatory = $true)]  [String]         $enableDiagnostics,
+        [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
+    )
+    switch ($type) {
+        "Connections" {
+            $connectionId = New-FabricConnection -connectionName $item.name -Context $Context
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($item.name).Id" -Value $connectionId
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($item.name).Name" -Value $item.name
+        }
+        "Domains" {
+            $domainId = New-FabricDomain -domainName $item.name -Context $Context
+            if ($item.rbacAssignments) {
+                foreach ($rbacAssignment in $item.rbacAssignments | Where-Object { ($_.type -in @('Admins', 'Contributors')) -and (![string]::IsNullOrWhiteSpace($_.upnList)) } ) {
+                    Add-DomainUsers -domainId $domainId -upnList $rbacAssignment.upnList -domainRole $rbacAssignment.type -Context $Context
+                }
+            }
+        }
+        "SubDomains" {
+            $parentDomain = Get-FabricDomain -domainName $parent -Context $Context
+            if($null -ne $parentDomain) {
+                $subDomainId = New-FabricDomain -domainName $item.name -parentDomainId $parentDomain.id -Context $Context
+                if ($item.rbacAssignments) {
+                    foreach ($rbacAssignment in $item.rbacAssignments | Where-Object { ($_.type -in @('Admins', 'Contributors')) -and (![string]::IsNullOrWhiteSpace($_.upnList)) } ) {
+                        Add-DomainUsers -domainId $subDomainId -upnList $rbacAssignment.upnList -domainRole $rbacAssignment.type -Context $Context
+                    }
+                }
+            }
+        }
+        "Workspaces"  {
+            $availableCapacities = Get-FabricCapacities -Context $Context
+            $capacity = $availableCapacities | Where-Object { $_.displayName -eq $item.capacity -and $_.state -eq 'Active' }
+            if($null -ne $capacity) {
+                $workspaceId = New-FabricWorkspace -workspaceName $item.name -capacityId $capacity.id -Context $Context
+                if ($item.rbacAssignments) {
+                    foreach ($rbacAssignment in $item.rbacAssignments | Where-Object { ($_.type -in @('Admins', 'Members', 'Contributors', 'Viewers')) -and (![string]::IsNullOrWhiteSpace($_.upnList)) } ) {
+                        Add-WorkspaceUsers -workspaceId $workspaceId -upnList $rbacAssignment.upnList -workspaceRole $rbacAssignment.type.Trimend('s') -Context $Context
+                    }
+                }
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($item.name).Id" -Value $workspaceId
+                if ([String]::IsNullOrEmpty($parent)) { return }
+                $domain = Get-FabricDomain -domainName $parent -Context $Context
+                Add-WorkspaceToDomain -domainId $domain.id -workspaceId $workspaceId -Context $Context | Out-Null
+            }
+            else {
+                Write-Message "Info" "List of capacities the principal can access (either administrator or a contributor):"
+                $i = 0
+                $availableCapacities | ForEach-Object {
+                    $i += 1
+                    Write-Message "Info" "$($i). $($_.displayName) (id:$($_.id), state:$($_.state))"
+                }
+                throw "Capacity '$($item.capacity)' could not be found, the process cannot create any fabric items without an EXISTENT & ACTIVE capacity"
+            }
+        }
+        "Lakehouses"  {
+            $workspace = Get-FabricWorkspace -workspaceName $parent -Context $Context
+            if($null -ne $workspace) {
+                $lakehouseId = New-Lakehouse -lakehouseName $item.name -workspaceId $workspace.id -Context $Context
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $lakehouseId
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                #Get the Connection string id from the Item
+                $lakehouseConnStr = Get-LakehouseSqlEndpoint -lakehouseId $lakehouseId -workspaceId $workspace.id -Context $Context
+                $MConnectionExpresion = "let database = Sql.Database(`"$($lakehouseConnStr)`",`"$($item.name)`") in database"
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).MConnectionExpresion" -Value $MConnectionExpresion
+                if ($item.shortcuts) {
+                    Add-LakehouseShortcuts -lakehouseId $lakehouseId -workspaceId $workspace.id -shortcuts $item.shortcuts -catalog $catalog -Context $Context
+                }
+            }
+        }
+        "Warehouses"  {
+            $workspace = Get-FabricWorkspace -workspaceName $parent -Context $Context
+            if($null -ne $workspace) {
+                $warehouseId = New-Warehouse -warehouseName $item.name -workspaceId $workspace.id -Context $Context
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $warehouseId
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                #Get the SqlCnnString from the Item
+                $warehouse = Get-Warehouse -warehouseId $warehouseId -workspaceId $workspace.id -Context $Context
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).CnnString" -Value $warehouse.properties.connectionString
+            }
+        }
+        "SqlDatabases"  {
+            $workspace = Get-FabricWorkspace -workspaceName $parent -Context $Context
+            if($null -ne $workspace) {
+                $sqldatabaseId = New-SqlDatabase -sqlDatabaseName $item.name -workspaceId $workspace.id -Context $Context
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $sqldatabaseId
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                #Get the SqlCnnString from the Item
+                $sqldatabase = Get-SqlDatabase -sqldatabaseId $sqldatabaseId -workspaceId $workspace.id -Context $Context
+                $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).CnnString" -Value $sqldatabase.properties.connectionString
+            }
+        }
+        "MirroredDatabases"  {
+            Write-Message "Warning" "Skipped  $($type) $($item.name), this Fabric Item is in construction."
+        }
+        "Notebooks"  {
+            $workspace = Get-FabricWorkspace -workspaceName $parent -Context $Context
+            if($null -ne $workspace) {
+                $detokenizedItem = Update-CatalogTokens -jsonData $item -propertiesCatalog $catalog
+                if (![string]::IsNullOrWhiteSpace($detokenizedItem.directory)) {
+                    $notebookDefinitionParts = New-ItemDefinitionParts `
+                        -itemName $item.name `
+                        -itemType "Notebook" `
+                        -dfnDirectory $detokenizedItem.directory `
+                        -dfnParts $detokenizedItem.dfnParts `
+                        -enableDiagnostics $enableDiagnostics
+
+                    if ($null -ne $notebookDefinitionParts) {
+                        $notebookId = New-FabricItem `
+                            -itemName $item.name `
+                            -itemType "Notebook" `
+                            -itemDefinitionParts $notebookDefinitionParts  `
+                            -partsMandatory 0 `
+                            -workspaceId $workspace.id `
+                            -updateDefinition ([Convert]::ToBoolean($updateDefinition)) `
+                            -Context $Context
+                        $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $notebookId
+                        $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                    }
+                }
+                else {
+                    $notebookId = New-FabricItem `
+                        -itemName $item.name `
+                        -itemType "Notebook" `
+                        -workspaceId $workspace.id `
+                        -Context $Context
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $notebookId
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                }
+            }
+        }
+        "SemanticModels"  {
+            $workspace = Get-FabricWorkspace -workspaceName $parent -Context $Context
+            if($null -ne $workspace) {
+                $detokenizedItem = Update-CatalogTokens -jsonData $item -propertiesCatalog $catalog
+                $semanticModelDefinitionParts = New-ItemDefinitionParts `
+                    -itemName $item.name `
+                    -itemType "SemanticModel" `
+                    -dfnDirectory $detokenizedItem.directory `
+                    -dfnParts $detokenizedItem.dfnParts `
+                    -enableDiagnostics $enableDiagnostics
+
+                if ($null -ne $semanticModelDefinitionParts) {
+                    $semanticmodelId = New-FabricItem `
+                        -itemName $item.name `
+                        -itemType "SemanticModel" `
+                        -itemDefinitionParts $semanticModelDefinitionParts  `
+                        -partsMandatory 1 `
+                        -workspaceId $workspace.id `
+                        -updateDefinition ([Convert]::ToBoolean($updateDefinition)) `
+                        -Context $Context
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $semanticmodelId
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                    $ConnectionString = "Data Source=powerbi://api.powerbi.com/v1.0/myorg/$($parent);Initial Catalog=$($item.name);Integrated Security=ClaimsToken"
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).CnnString" -Value $ConnectionString
+                    $FlattenedJson = "{'byConnection':{'connectionString':'$($ConnectionString)','connectionType':'pbiServiceXmlaStyleLive','name':'EntityDataSource','pbiModelDatabaseName':'$($semanticmodelId)','pbiModelVirtualServerName':'sobe_wowvirtualserver','pbiServiceModelId':null},'byPath':null}"
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).DatasetReference" -Value $FlattenedJson
+                }
+            }
+        }
+        "DataPipelines"  {
+            $workspace = Get-FabricWorkspace -workspaceName $parent -Context $Context
+            if($null -ne $workspace) {
+                $detokenizedItem = Update-CatalogTokens -jsonData $item -propertiesCatalog $catalog
+                if (![string]::IsNullOrWhiteSpace($detokenizedItem.directory)) {
+                    $dataPipelineDefinitionParts = New-ItemDefinitionParts `
+                        -itemName $item.name `
+                        -itemType "DataPipeline" `
+                        -dfnDirectory $detokenizedItem.directory `
+                        -dfnParts $detokenizedItem.dfnParts `
+                        -enableDiagnostics $enableDiagnostics
+
+                    if ($null -ne $dataPipelineDefinitionParts) {
+                        $dataPipelineId = New-FabricItem `
+                            -itemName $item.name `
+                            -itemType "DataPipeline" `
+                            -itemDefinitionParts $dataPipelineDefinitionParts  `
+                            -partsMandatory 0 `
+                            -workspaceId $workspace.id `
+                            -updateDefinition ([Convert]::ToBoolean($updateDefinition)) `
+                            -Context $Context
+                        $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $dataPipelineId
+                        $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                    }
+                }
+                else {
+                    $dataPipelineId = New-FabricItem `
+                        -itemName $item.name `
+                        -itemType "DataPipeline" `
+                        -workspaceId $workspace.id `
+                        -Context $Context
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $dataPipelineId
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                }
+            }
+        }
+        "Reports"  {
+            $workspace = Get-FabricWorkspace -workspaceName $parent -Context $Context
+            if($null -ne $workspace) {
+                $detokenizedItem = Update-CatalogTokens -jsonData $item -propertiesCatalog $catalog
+                $reportDefinitionParts = New-ItemDefinitionParts `
+                    -itemName $item.name `
+                    -itemType "Report" `
+                    -dfnDirectory $detokenizedItem.directory `
+                    -dfnParts $detokenizedItem.dfnParts `
+                    -enableDiagnostics $enableDiagnostics
+
+                if ($null -ne $reportDefinitionParts) {
+                    $reportId = New-FabricItem `
+                        -itemName $item.name `
+                        -itemType "Report" `
+                        -itemDefinitionParts $reportDefinitionParts  `
+                        -workspaceId $workspace.id `
+                        -updateDefinition ([Convert]::ToBoolean($updateDefinition)) `
+                        -Context $Context
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Id" -Value $reportId
+                    $catalog | Add-Member -MemberType NoteProperty -Name "$($parent).$($item.name).Name" -Value $item.name
+                }
+            }
+        }
+        default  {
+            Write-Message "Warning" "Skipped  $($type) $($item.name), this Fabric Item is not yet supported."
+            Return
+        }
+    }
+}
+
+function Invoke-MapItemProcessing {
+    param (
+        [Parameter(Mandatory=$true)]  [psobject]       $jsonObject,
+        [Parameter(Mandatory=$false)] [string]         $parentName = "",
+        [Parameter(Mandatory=$true)]  [PSCustomObject] $catalog,
+        [Parameter(Mandatory=$true)]  [string]         $enableDiagnostics,
+        [Parameter(Mandatory=$false)] [PSCustomObject] $Context = $null
+    )
+
+    # Priority groups
+    $priority1 = @("Lakehouses", "Warehouses", "SqlDatabases")
+    $priority2 = @("MirroredDatabases", "Notebooks", "SemanticModels", "DataPipelines")
+    $priority3 = @("Reports")
+    # Helper function to process items based on priority
+    function ProcessItemGroup {
+        param (
+            [Parameter(Mandatory=$true)] [psobject]       $items,
+            [Parameter(Mandatory=$true)] [array]          $priorityGroup,
+            [Parameter(Mandatory=$true)] [string]         $workspaceName,
+            [Parameter(Mandatory=$true)] [PSCustomObject] $catalog,
+            [Parameter(Mandatory=$true)] [string]         $enableDiagnostics,
+            [Parameter(Mandatory=$false)] [PSCustomObject] $Context = $null
+        )
+
+        foreach ($category in $priorityGroup) {
+            if ($items.PSObject.Properties[$category]) {
+                foreach ($item in $items.$category | Where-Object { $_.active -eq 1 }) {
+                    New-MapItem -item $item -type $category -parent $workspaceName -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+                }
+            }
+        }
+    }
+
+    # Recursive traversal for connections
+    if ($jsonObject.PSObject.Properties.Name -contains 'Connections' -and $null -ne $jsonObject.connections) {
+        foreach ($connection in $jsonObject.connections | Where-Object { $_.active -eq 1 }) {
+            New-MapItem -item $connection -type "Connections" -parent $parentName -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+            Invoke-MapItemProcessing -jsonObject $connection -parentName $connection.name -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+        }
+    }
+
+    # Recursive traversal for domains and subdomains
+    if ($jsonObject.PSObject.Properties.Name -contains 'Domains' -and $null -ne $jsonObject.domains) {
+        foreach ($domain in $jsonObject.domains | Where-Object { $_.active -eq 1 }) {
+            New-MapItem -item $domain -type "Domains" -parent $parentName -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+            Invoke-MapItemProcessing -jsonObject $domain -parentName $domain.name -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+        }
+    }
+
+    if ($jsonObject.PSObject.Properties.Name -contains 'SubDomains' -and $null -ne $jsonObject.subDomains) {
+        foreach ($subDomain in $jsonObject.subDomains | Where-Object { $_.active -eq 1 }) {
+            New-MapItem -item $subDomain -type "SubDomains" -parent $parentName -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+            Invoke-MapItemProcessing -jsonObject $subDomain -parentName $subDomain.name -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+        }
+    }
+
+    if ($jsonObject.PSObject.Properties.Name -contains 'Workspaces' -and $null -ne $jsonObject.workspaces) {
+        foreach ($workspace in $jsonObject.workspaces | Where-Object { $_.active -eq 1 }) {
+            New-MapItem -item $workspace -type "Workspaces" -parent $parentName -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+            # Process items by priority groups within the workspace
+            if ($workspace.PSObject.Properties.Name -contains 'Items' -and $null -ne $workspace.items) {
+                $items = $workspace.items
+                # Process the first group (lakehouses, warehouses, databases)
+                ProcessItemGroup -items $items -priorityGroup $priority1 -workspaceName $workspace.name -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+                # Process the second group (semanticModels, dataPipelines, notebooks)
+                ProcessItemGroup -items $items -priorityGroup $priority2 -workspaceName $workspace.name -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+                # Process the third group (reports)
+                ProcessItemGroup -items $items -priorityGroup $priority3 -workspaceName $workspace.name -catalog $catalog -enableDiagnostics $enableDiagnostics -Context $Context
+            }
+        }
+    }
+}
+
+try {
+    Write-Message "Info" "Powershell version : $($PSVersionTable.PSVersion)"
+    # Get all defined parameters in the script
+    $scriptParams = $MyInvocation.MyCommand.Parameters.Keys
+    $maxLength = ($scriptParams | Measure-Object -Maximum -Property Length).Maximum
+    foreach ($param in $scriptParams) {
+        $value = Get-Variable -Name $param -ValueOnly -ErrorAction SilentlyContinue
+        $displayValue = if ([string]::IsNullOrEmpty($value)) { "empty" } else { $value }
+        Write-Message "Info" ("{0,-$maxLength} : {1}" -f $param, $displayValue)
+    }
+    Initialize-AuthContext | Out-Null
+    Get-AzContext | Out-Null
+
+    $azdoConfig = New-AzdoConfig `
+        -AzdoBaseUrl         $script:azdoBaseUrl `
+        -OrganizationName    $script:organizationName `
+        -ProjectName         $script:projectName `
+        -RepositoryName      $script:repositoryName `
+        -SourceBranchName    $script:sourceBranchName `
+        -DevOpsRequestHeader $script:devOpsRequestHeader
+
+    Write-Message "Info" "Selected map JSON file $($script:jsonMapFileName)."
+    $repoJsonMapFilePath = "$($script:deploymentDirectoryPath)/$($script:dataProduct)/map/$($script:jsonMapFileName)"
+    if (-not (Test-DevOpsRepoPath -gitPath $repoJsonMapFilePath -AzdoConfig $azdoConfig)) {
+        throw "Map file '$repoJsonMapFilePath' not found in the repository."
+    }
+    $deploymentDirectoryPathAux = ".\temp\mapDeployment"
+    Copy-DevOpsRepoBranchRestAPI `
+        -gitPath "$($script:deploymentDirectoryPath)/$($script:dataProduct)" `
+        -localFolder $deploymentDirectoryPathAux `
+        -AzdoConfig $azdoConfig | Out-Null
+
+    $jsonMapFilePath = "$($deploymentDirectoryPathAux)\$($script:deploymentDirectoryPath)\$($script:dataProduct)\map\$($script:jsonMapFileName)"
+    $jsonMap =  Get-FileContent -filePath $jsonMapFilePath | ConvertFrom-Json
+    #This will contain all the tokens properties collected form item as they are bein created
+    $script:fabricItemsPropertiesCatalog = [PSCustomObject]@{}
+    # Call the recursive function
+    Invoke-MapItemProcessing -jsonObject $jsonMap -catalog $script:fabricItemsPropertiesCatalog -enableDiagnostics $script:enableDiagnostics
+    Write-Message "Info" "Script execution completed successfully."
+}
+catch {
+    $errorResponse = Get-ErrorResponse($_)
+    Write-Message "Error" "$($errorResponse). Powershell script MapMainFunction failed to complete"
+    # Explicitly fail the task and set the result to Failed
+    Write-Host "##vso[task.logissue type=error]$errorResponse"
+    Write-Host "##vso[task.complete result=Failed;]"
+    exit 1
+}

@@ -1,0 +1,9 @@
+{
+    "name": "fabriccatalyst-updatefromgit",
+    "version": "1.0.0",
+    "description": "FabricCatalyst Update From Git task",
+    "main": "index.js",
+    "dependencies": {
+        "azure-pipelines-task-lib": "^5.2.10"
+    }
+}

@@ -1,0 +1,58 @@
+{
+    "manifestVersion": 1,
+    "id": "fabriccatalyst",
+    "publisher": "techtacofriday",
+    "version": "1.2.0",
+    "name": "FabricCatalyst",
+    "description": "Azure DevOps tasks for deploying and managing Microsoft Fabric items across environments.",
+    "public": true,
+    "categories": [
+        "Azure Pipelines"
+    ],
+    "targets": [
+        {
+            "id": "Microsoft.VisualStudio.Services"
+        }
+    ],
+    "branding": {
+        "color": "#0078D4",
+        "theme": "dark"
+    },
+    "icons": {
+        "default": "images/extension-icon.png"
+    },
+    "content": {
+        "details": {
+            "path": "overview.md"
+        }
+    },
+    "files": [
+        { "path": "tasks/AutoDeploy",     "packagePath": "tasks/AutoDeploy" },
+        { "path": "tasks/shared/private", "packagePath": "tasks/AutoDeploy/private" },
+        { "path": "tasks/PromoteStage",    "packagePath": "tasks/PromoteStage" },
+        { "path": "tasks/shared/private", "packagePath": "tasks/PromoteStage/private" },
+        { "path": "tasks/UpdateFromGit",  "packagePath": "tasks/UpdateFromGit" },
+        { "path": "tasks/shared/private", "packagePath": "tasks/UpdateFromGit/private" },
+        { "path": "images/extension-icon.png", "addressable": true }
+    ],
+    "contributions": [
+        {
+            "id": "FabricCatalystAutoDeploy",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [ "ms.vss-distributed-task.tasks" ],
+            "properties": { "name": "tasks/AutoDeploy" }
+        },
+        {
+            "id": "FabricCatalystPromoteStage",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [ "ms.vss-distributed-task.tasks" ],
+            "properties": { "name": "tasks/PromoteStage" }
+        },
+        {
+            "id": "FabricCatalystUpdateFromGit",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [ "ms.vss-distributed-task.tasks" ],
+            "properties": { "name": "tasks/UpdateFromGit" }
+        }
+    ]
+}

@@ -1,0 +1,265 @@
+{
+    "id": "e377abce-fe73-4026-a275-46369405abf1",
+    "name": "FabricCatalystAutoDeploy",
+    "friendlyName": "FabricCatalyst - Auto Deployment",
+    "description": "Deploys Microsoft Fabric items from a Git-connected workspace using branch auto-discovery. Handles tiered deployment of Lakehouses, Warehouses, Notebooks, Semantic Models, Data Pipelines and Reports.",
+    "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
+    "category": "Deploy",
+    "visibility": [
+        "Build",
+        "Release"
+    ],
+    "author": "TechTacoFriday",
+    "version": {
+        "Major": 1,
+        "Minor": 1,
+        "Patch": 0
+    },
+    "instanceNameFormat": "FabricCatalyst Auto Deploy $(workspacePrefix)",
+    "groups": [
+        {
+            "name": "workspace",
+            "displayName": "Workspace",
+            "isExpanded": true
+        },
+        {
+            "name": "git",
+            "displayName": "Git Integration",
+            "isExpanded": true
+        },
+        {
+            "name": "deploymentPipeline",
+            "displayName": "Deployment Pipeline",
+            "isExpanded": false
+        },
+        {
+            "name": "configuration",
+            "displayName": "Configuration",
+            "isExpanded": false
+        },
+        {
+            "name": "advanced",
+            "displayName": "Advanced",
+            "isExpanded": false
+        }
+    ],
+    "inputs": [
+        {
+            "name": "azureSubscription",
+            "type": "connectedService:AzureRM",
+            "label": "Azure Subscription",
+            "required": true,
+            "helpMarkDown": "Azure service connection with access to the Fabric tenant. Used to obtain tokens for the Fabric, Azure DevOps and Microsoft Graph APIs."
+        },
+        {
+            "name": "workspacePrefix",
+            "type": "string",
+            "label": "Workspace Prefix",
+            "required": true,
+            "groupName": "workspace",
+            "helpMarkDown": "Prefix used to name Fabric workspaces. The environment code is appended automatically, e.g. 'MyProduct' produces 'ws_MyProduct_dev'."
+        },
+        {
+            "name": "capacityName",
+            "type": "string",
+            "label": "Capacity Name",
+            "required": true,
+            "groupName": "workspace",
+            "helpMarkDown": "Display name of the active Fabric capacity to assign workspaces to."
+        },
+        {
+            "name": "environmentList",
+            "type": "string",
+            "label": "Environments",
+            "required": true,
+            "defaultValue": "[{\"code\":\"dev\",\"gitEnabled\":1}]",
+            "groupName": "workspace",
+            "helpMarkDown": "JSON array of environments. Each entry requires 'code' (environment suffix) and 'gitEnabled' (1 = connect workspace to Git, 0 = skip). Example: [{\"code\":\"dev\",\"gitEnabled\":1},{\"code\":\"uat\",\"gitEnabled\":0}]"
+        },
+        {
+            "name": "domainName",
+            "type": "string",
+            "label": "Domain Name",
+            "required": false,
+            "defaultValue": "",
+            "groupName": "workspace",
+            "helpMarkDown": "Fabric domain to assign the deployed workspaces to. Leave empty to skip domain assignment."
+        },
+        {
+            "name": "subDomainName",
+            "type": "string",
+            "label": "Sub-Domain Name",
+            "required": false,
+            "defaultValue": "",
+            "groupName": "workspace",
+            "helpMarkDown": "Fabric sub-domain. Only used when Domain Name is provided."
+        },
+        {
+            "name": "workspaceAdminsList",
+            "type": "string",
+            "label": "Workspace Administrators",
+            "required": true,
+            "groupName": "workspace",
+            "helpMarkDown": "Semicolon-separated list of UPNs to assign as Workspace Admin role. At least one admin is required so the workspace remains accessible after deployment. Example: user@contoso.com;group@contoso.com"
+        },
+        {
+            "name": "workspaceContributorsList",
+            "type": "string",
+            "label": "Workspace Contributors",
+            "required": false,
+            "defaultValue": "",
+            "groupName": "workspace",
+            "helpMarkDown": "Semicolon-separated list of UPNs to assign as Workspace Contributor role. Leave empty to skip."
+        },
+        {
+            "name": "workspaceMembersList",
+            "type": "string",
+            "label": "Workspace Members",
+            "required": false,
+            "defaultValue": "",
+            "groupName": "workspace",
+            "helpMarkDown": "Semicolon-separated list of UPNs to assign as Workspace Member role. Leave empty to skip."
+        },
+        {
+            "name": "workspaceViewersList",
+            "type": "string",
+            "label": "Workspace Viewers",
+            "required": false,
+            "defaultValue": "",
+            "groupName": "workspace",
+            "helpMarkDown": "Semicolon-separated list of UPNs to assign as Workspace Viewer role. Leave empty to skip."
+        },
+        {
+            "name": "fabricGitConnectionName",
+            "type": "string",
+            "label": "Fabric Git Connection Name",
+            "required": true,
+            "groupName": "git",
+            "helpMarkDown": "Name of the Git connection already configured in the Fabric workspace (Settings > Git integration)."
+        },
+        {
+            "name": "organizationName",
+            "type": "string",
+            "label": "Azure DevOps Organization",
+            "required": true,
+            "groupName": "git",
+            "helpMarkDown": "Azure DevOps organization name (the part after dev.azure.com/)."
+        },
+        {
+            "name": "projectName",
+            "type": "string",
+            "label": "Azure DevOps Project",
+            "required": true,
+            "groupName": "git",
+            "helpMarkDown": "Azure DevOps project that contains the Fabric items repository."
+        },
+        {
+            "name": "repositoryName",
+            "type": "string",
+            "label": "Repository Name",
+            "required": true,
+            "groupName": "git",
+            "helpMarkDown": "Name of the Azure DevOps repository that holds the Fabric item definitions."
+        },
+        {
+            "name": "sourceBranchName",
+            "type": "string",
+            "label": "Source Branch",
+            "required": true,
+            "defaultValue": "main",
+            "groupName": "git",
+            "helpMarkDown": "Branch from which Fabric items are discovered and deployed."
+        },
+        {
+            "name": "itemsGitFolder",
+            "type": "string",
+            "label": "Fabric Items Folder",
+            "required": true,
+            "defaultValue": "/fabric/gitenabled",
+            "groupName": "git",
+            "helpMarkDown": "Path in the repository where Git-enabled Fabric items are stored. Must start with '/'."
+        },
+        {
+            "name": "useEmptyBranch",
+            "type": "boolean",
+            "label": "Create Empty Branch",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "git",
+            "helpMarkDown": "When enabled, creates a new empty branch in the workspace before syncing. Use for first-time deployments into a clean workspace."
+        },
+        {
+            "name": "createDeploymentPipeline",
+            "type": "boolean",
+            "label": "Create Deployment Pipeline",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "deploymentPipeline",
+            "helpMarkDown": "When enabled, creates a Fabric deployment pipeline to promote items across environments."
+        },
+        {
+            "name": "deploymentPipelineName",
+            "type": "string",
+            "label": "Deployment Pipeline Name",
+            "required": false,
+            "defaultValue": "",
+            "groupName": "deploymentPipeline",
+            "visibleRule": "createDeploymentPipeline = true",
+            "helpMarkDown": "Name for the Fabric deployment pipeline to create."
+        },
+        {
+            "name": "pipelineAdminsList",
+            "type": "string",
+            "label": "Pipeline Administrators",
+            "required": false,
+            "defaultValue": "",
+            "groupName": "deploymentPipeline",
+            "visibleRule": "createDeploymentPipeline = true",
+            "helpMarkDown": "Semicolon-separated list of UPNs to assign as Pipeline Admin role."
+        },
+        {
+            "name": "deploymentDirectoryPath",
+            "type": "string",
+            "label": "Deployment Directory Path",
+            "required": true,
+            "defaultValue": "devops/pipelines/fabriccatalyst/dataproduct/deployment",
+            "groupName": "configuration",
+            "helpMarkDown": "Path in the repository to the root of the deployment configuration folder. Use forward slashes."
+        },
+        {
+            "name": "fabricItemsLocation",
+            "type": "string",
+            "label": "Fabric Items Location",
+            "required": false,
+            "defaultValue": "LocalDirectory",
+            "groupName": "configuration",
+            "helpMarkDown": "Source location for Fabric item definition files. 'LocalDirectory' reads from the checked-out repository."
+        },
+        {
+            "name": "customizeDeployment",
+            "type": "boolean",
+            "label": "Customize Deployment",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "configuration",
+            "helpMarkDown": "When enabled, applies token substitution from the deployment configuration CSV before deploying items."
+        },
+        {
+            "name": "enableDiagnostics",
+            "type": "boolean",
+            "label": "Enable Diagnostics",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "advanced",
+            "helpMarkDown": "Outputs detailed diagnostic messages to the pipeline log. Use for troubleshooting only."
+        }
+    ],
+    "execution": {
+        "Node20": {
+            "target": "index.js"
+        },
+        "Node16": {
+            "target": "index.js"
+        }
+    }
+}

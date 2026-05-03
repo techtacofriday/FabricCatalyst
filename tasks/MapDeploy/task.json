@@ -1,0 +1,140 @@
+{
+    "id": "b5e21f8d-c047-4a9e-8b3f-d6174a30e529",
+    "name": "FabricCatalystMapDeploy",
+    "friendlyName": "FabricCatalyst - Map Deployment",
+    "description": "Deploys Microsoft Fabric items using a JSON map file. Designed for SQL-to-Fabric migration scenarios.",
+    "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
+    "category": "Deploy",
+    "visibility": [
+        "Build",
+        "Release"
+    ],
+    "author": "TechTacoFriday",
+    "version": {
+        "Major": 1,
+        "Minor": 0,
+        "Patch": 1
+    },
+    "instanceNameFormat": "FabricCatalyst Map Deploy $(jsonMapFileName)",
+    "groups": [
+        {
+            "name": "source",
+            "displayName": "Source",
+            "isExpanded": true
+        },
+        {
+            "name": "configuration",
+            "displayName": "Configuration",
+            "isExpanded": false
+        },
+        {
+            "name": "advanced",
+            "displayName": "Advanced",
+            "isExpanded": false
+        }
+    ],
+    "inputs": [
+        {
+            "name": "azureSubscription",
+            "type": "connectedService:AzureRM",
+            "label": "Azure Subscription",
+            "required": true,
+            "helpMarkDown": "Azure service connection used to obtain tokens for the Fabric, Azure DevOps and Microsoft Graph APIs."
+        },
+        {
+            "name": "organizationName",
+            "type": "string",
+            "label": "Azure DevOps Organization",
+            "required": true,
+            "groupName": "source",
+            "helpMarkDown": "Azure DevOps organization name (the part after dev.azure.com/)."
+        },
+        {
+            "name": "projectName",
+            "type": "string",
+            "label": "Azure DevOps Project",
+            "required": true,
+            "groupName": "source",
+            "helpMarkDown": "Azure DevOps project containing the JSON map file and deployment configuration."
+        },
+        {
+            "name": "repositoryName",
+            "type": "string",
+            "label": "Repository Name",
+            "required": true,
+            "groupName": "source",
+            "helpMarkDown": "Repository that holds the JSON map file and deployment configuration."
+        },
+        {
+            "name": "sourceBranchName",
+            "type": "string",
+            "label": "Source Branch",
+            "required": true,
+            "defaultValue": "main",
+            "groupName": "source",
+            "helpMarkDown": "Branch from which to read the JSON map file."
+        },
+        {
+            "name": "jsonMapFileName",
+            "type": "string",
+            "label": "JSON Map File Name",
+            "required": true,
+            "defaultValue": "_sqlMeetsFabric.json",
+            "groupName": "configuration",
+            "helpMarkDown": "Name of the JSON file that maps SQL objects to Fabric items."
+        },
+        {
+            "name": "dataProduct",
+            "type": "string",
+            "label": "Data Product",
+            "required": false,
+            "defaultValue": "Default",
+            "groupName": "configuration",
+            "helpMarkDown": "Data product name used to locate the deployment configuration folder."
+        },
+        {
+            "name": "deploymentDirectoryPath",
+            "type": "string",
+            "label": "Deployment Directory Path",
+            "required": true,
+            "defaultValue": "devops/pipelines/fabriccatalyst/dataproduct/deployment",
+            "groupName": "configuration",
+            "helpMarkDown": "Path in the repository to the root of the deployment configuration folder."
+        },
+        {
+            "name": "fabricItemsLocation",
+            "type": "string",
+            "label": "Fabric Items Location",
+            "required": false,
+            "defaultValue": "LocalDirectory",
+            "groupName": "configuration",
+            "helpMarkDown": "Source location for Fabric item definition files."
+        },
+        {
+            "name": "updateDefinition",
+            "type": "boolean",
+            "label": "Update Item Definitions",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "configuration",
+            "helpMarkDown": "When enabled, pushes the latest item definitions to the deployed workspace."
+        },
+        {
+            "name": "enableDiagnostics",
+            "type": "boolean",
+            "label": "Enable Diagnostics",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "advanced",
+            "helpMarkDown": "Outputs detailed diagnostic messages to the pipeline log."
+        }
+    ],
+    "execution": {
+        "Node20": {
+            "target": "index.js"
+        },
+        "Node16": {
+            "target": "index.js"
+        }
+    }
+}
