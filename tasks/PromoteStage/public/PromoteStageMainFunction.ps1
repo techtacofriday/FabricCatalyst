@@ -45,10 +45,9 @@ try {
     Initialize-AuthContext -TenantId $tenantId -ServicePrincipalId $servicePrincipalId -ServicePrincipalSecret $servicePrincipalSecret | Out-Null
     Get-AzContext | Out-Null
 
-    $deploymentPipelineFQN = "pl_{0}" -f $script:deploymentPipelineName
-    $pipeline = Get-DeploymentPipeline -deploymentPipelineName $deploymentPipelineFQN
+    $pipeline = Get-DeploymentPipeline -deploymentPipelineName $script:deploymentPipelineName
     if ($null -eq $pipeline) {
-        throw "Deployment pipeline '$deploymentPipelineFQN' was not found."
+        throw "Deployment pipeline '$($script:deploymentPipelineName)' was not found."
     }
 
     $stages = Get-PipelineStages -deploymentPipelineId $pipeline.id
@@ -56,13 +55,13 @@ try {
 
     if ($null -eq $target) {
         $available = ($stages | Select-Object -ExpandProperty displayName) -join ', '
-        throw "Stage '$($script:targetStageName)' not found in pipeline '$deploymentPipelineFQN'. Available stages: $available"
+        throw "Stage '$($script:targetStageName)' not found in pipeline '$($script:deploymentPipelineName)'. Available stages: $available"
     }
     if ($target.order -eq 0) {
         throw "Stage '$($script:targetStageName)' is the first stage (order 0) and cannot be a promotion target."
     }
 
-    Write-Message "Action" "Promoting stage order $($target.order - 1) to $($target.order) ('$($script:targetStageName)') in pipeline '$deploymentPipelineFQN'."
+    Write-Message "Action" "Promoting stage order $($target.order - 1) to $($target.order) ('$($script:targetStageName)') in pipeline '$($script:deploymentPipelineName)'."
     Publish-PipelineStageByOrder -deploymentPipelineId $pipeline.id -stageOrder ($target.order - 1)
 
     Write-Message "Info" "Script execution completed successfully."
