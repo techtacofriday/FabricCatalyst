@@ -5,7 +5,7 @@ param()
 $workspaceName          = $env:FC_WORKSPACENAME
 $fabricGitConnectionName = $env:FC_FABRICGITCONNECTIONNAME
 $semanticModelsBinding  = $env:FC_SEMANTICMODELSBINDING
-$folderName             = $env:FC_FOLDERNAME
+$postDeploymentFolder   = $env:FC_POSTDEPLOYMENTFOLDER
 $isWorkspaceGitEnabled  = $env:FC_ISWORKSPACEGITENABLED
 $enableDiagnostics      = $env:FC_ENABLEDIAGNOSTICS
 #endregion
@@ -40,7 +40,7 @@ $params = @{
     workspaceName           = $workspaceName
     fabricGitConnectionName = $fabricGitConnectionName
     semanticModelsBinding   = $semanticModelsBinding
-    folderName              = $folderName
+    postDeploymentFolder    = $postDeploymentFolder
     isWorkspaceGitEnabled   = $isWorkspaceGitEnabled
     enableDiagnostics       = $enableDiagnostics
 }
