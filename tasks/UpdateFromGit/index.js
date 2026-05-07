@@ -28,11 +28,7 @@ function run() {
         }
 
         // Boolean inputs (PowerShell expects 'True'/'False')
-        for (const name of [
-            'isWorkspaceGitEnabled', 'enableDiagnostics',
-        ]) {
-            env[`FC_${name.toUpperCase()}`] = tl.getBoolInput(name, false) ? 'True' : 'False';
-        }
+        env.FC_ENABLEDIAGNOSTICS = tl.getBoolInput('enableDiagnostics', false) ? 'True' : 'False';
 
         // Invoke run.ps1
         const script = path.join(__dirname, 'run.ps1');
