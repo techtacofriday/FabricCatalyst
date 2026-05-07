@@ -52,17 +52,17 @@ Environment-specific configuration uses **CSV files with `#{token}#` placeholder
 - task: FabricCatalystAutoDeploy@1
   displayName: Deploy Fabric workspaces
   inputs:
-    azureSubscription: 'my-fabric-service-connection'
-    workspacePrefix: 'MyProduct'
-    capacityName: 'my-capacity'
-    environmentList: '[{"code":"dev","gitEnabled":1},{"code":"uat","gitEnabled":0}]'
-    fabricGitConnectionName: 'MyFabricGitConnection'
-    organizationName: 'myorg'
-    projectName: 'MyProject'
-    repositoryName: 'fabric-items'
+    azureSubscription: 'my-devops-service-connection'
+    workspacePrefix: 'my-awesome-data-product'
+    capacityName: 'my-fabric-capacity'
+    environmentList: '[{"code":"dev","gitEnabled":1},{"code":"uat","gitEnabled":0},{"code":"prod","gitEnabled":0}]'
+    fabricGitConnectionName: 'my-fabric-devops-source-connection'
+    organizationName: 'my-devops-org'
+    projectName: 'my-devops-project'
+    repositoryName: 'products-git-repository'
     sourceBranchName: 'main'
     itemsGitFolder: '/fabric/gitenabled'
-    deploymentDirectoryPath: 'devops/pipelines/fabriccatalyst/dataproduct/deployment'
+    deploymentDirectoryPath: 'devops/my-env-configuration'
 ```
 
 This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, and deploys all Fabric items in tier order. Subsequent runs are idempotent.
@@ -73,8 +73,8 @@ This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_
 - task: FabricCatalystPromoteStage@1
   displayName: Promote to UAT
   inputs:
-    azureSubscription: 'my-fabric-service-connection'
-    deploymentPipelineName: 'MyProduct'
+    azureSubscription: 'my-devops-service-connection'
+    deploymentPipelineName: 'my-fabric-deployment-pipeline'
     targetStageName: 'uat'
 ```
 
@@ -86,34 +86,34 @@ The Fabric deployment pipeline must be named `pl_MyProduct`. The task resolves t
 - task: FabricCatalystUpdateFromGit@1
   displayName: Sync workspace from Git
   inputs:
-    azureSubscription: 'my-fabric-service-connection'
-    workspaceName: 'ws_MyProduct_dev'
+    azureSubscription: 'my-devops-service-connection'
+    workspaceName: 'ws_my-awesome-data-product_dev'
     isWorkspaceGitEnabled: true
-    fabricGitConnectionName: 'MyFabricGitConnection'
+    fabricGitConnectionName: 'my-fabric-devops-source-connection'
     semanticModelsBinding: '[{"modelName":"*","cnnName":"my-connection"}]'
-    folderName: 'Vertipaq'
+    postDeploymentFolder: 'post-deployment'
 ```
 
-Patches Git credentials, runs `updateFromGit`, binds all semantic models to `my-connection`, then runs every notebook in the `Vertipaq` folder.
+Patches Git credentials, runs `updateFromGit`, binds all semantic models to `my-connection`, then runs every notebook in the `post-deployment` folder.
 
 ---
 
 ## Requirements
 
-- Microsoft Fabric-enabled tenant with **F-SKU capacity** or higher
+- Microsoft Fabric-enabled tenant with an active **capacity**
 - Azure DevOps service connection using a **service principal** with:
   - Microsoft Graph read permissions (users and groups)
   - Fabric tenant settings enabled for service principal API access
   - Basic access in the ADO organization
 
-Full setup instructions and prerequisites: [github.com/fabriccatalyst/FabricCatalyst](https://github.com/fabriccatalyst/FabricCatalyst)
+Full setup instructions and prerequisites: [github.com/techtacofriday/FabricCatalyst](https://github.com/techtacofriday/FabricCatalyst)
 
 ---
 
 ## Support and source
 
-- **GitHub:** [github.com/fabriccatalyst/FabricCatalyst](https://github.com/fabriccatalyst/FabricCatalyst)
-- **Website:** [fabriccatalyst.com](https://fabriccatalyst.com)
-- **Author:** Svenchio — [techtacofriday.com](https://techtacofriday.com)
+- **GitHub:** [github.com/techtacofriday/FabricCatalyst](https://github.com/techtacofriday/FabricCatalyst)
+- **Author:** Svenchio — [LinkedIn](www.linkedin.com/in/svenchio) | [Sessionize](https://sessionize.com/svenchio)
+- **Blog:** TechTacoFriday — [techtacofriday.com](https://techtacofriday.com)
 
 Report issues and contribute at the GitHub repository.

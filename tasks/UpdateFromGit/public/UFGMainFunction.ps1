@@ -15,7 +15,7 @@ param
     [parameter(Mandatory = $false)] [String] $fabricGitConnectionName,
     [parameter(Mandatory = $false)] [String] $workspaceName,
     [parameter(Mandatory = $false)] [String] $semanticModelsBinding = "[]",
-    [parameter(Mandatory = $false)] [String] $folderName = "Vertipaq",
+    [parameter(Mandatory = $false)] [String] $postDeploymentFolder = "post-deployment",
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $isWorkspaceGitEnabled = "False",
     [parameter(Mandatory = $false)]
@@ -130,22 +130,22 @@ try {
 
     #3. CONFIGURE ROW LEVEL SECURITY
     # Run all notebooks and stop on first failure
-    $folderId = Get-FabricFolder -workspaceId $workspace.id -displayName $script:folderName
+    $folderId = Get-FabricFolder -workspaceId $workspace.id -displayName $script:postDeploymentFolder
     if (-not [string]::IsNullOrWhiteSpace($folderId)) {
         $items = Get-FabricItemsByFolder -workspaceId $workspace.id -type "Notebook" -rootFolderId $folderId
         if (-not $items -or $items.Count -eq 0) {
-            Write-Message "Info" "No Notebook items found in folder '$($script:folderName)' (id=$folderId). Nothing to run."
+            Write-Message "Info" "No Notebook items found in folder '$($script:postDeploymentFolder)' (id=$folderId). Nothing to run."
         }
         else {
             foreach ($item in $items) {
                 $itemId = $item.id
                 $name   = $item.displayName
                 if ($item.displayName -ne "notebookSample") {
-                    Write-Message "Action" "Running notebook '$name' (id=$itemId) in folder '$($script:folderName)'..."
+                    Write-Message "Action" "Running notebook '$name' (id=$itemId) in folder '$($script:postDeploymentFolder)'..."
                     Invoke-FabricNotebook -workspaceId $workspace.id -notebookItemId $itemId -whatIf $whatIf | Out-Null
                 }
             }
-            Write-Message "Info" "All notebooks in folder '$($script:folderName)' completed successfully."
+            Write-Message "Info" "All notebooks in folder '$($script:postDeploymentFolder)' completed successfully."
         }
     }
 

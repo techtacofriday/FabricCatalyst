@@ -22,7 +22,7 @@ function run() {
 
         // String inputs
         for (const name of [
-            'workspaceName', 'fabricGitConnectionName', 'semanticModelsBinding', 'folderName',
+            'workspaceName', 'fabricGitConnectionName', 'semanticModelsBinding', 'postDeploymentFolder',
         ]) {
             env[`FC_${name.toUpperCase()}`] = tl.getInput(name, false) || '';
         }

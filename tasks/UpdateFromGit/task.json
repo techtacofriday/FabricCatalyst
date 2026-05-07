@@ -13,7 +13,7 @@
     "version": {
         "Major": 1,
         "Minor": 1,
-        "Patch": 2
+        "Patch": 3
     },
     "instanceNameFormat": "FabricCatalyst Update From Git $(workspaceName)",
     "groups": [
@@ -81,13 +81,13 @@
             "helpMarkDown": "JSON array mapping model names to connection names. Use '*' as a wildcard to bind all remaining models to a connection. Example: [{\"modelName\":\"*\",\"cnnName\":\"my-connection\"}]"
         },
         {
-            "name": "folderName",
+            "name": "postDeploymentFolder",
             "type": "string",
-            "label": "Notebooks Folder Name",
+            "label": "Post-Deployment Folder Name",
             "required": false,
-            "defaultValue": "Vertipaq",
+            "defaultValue": "post-deployment",
             "groupName": "notebooks",
-            "helpMarkDown": "Name of the workspace folder containing notebooks to run after the sync (e.g. row-level security setup). All notebooks in the folder are executed in order."
+            "helpMarkDown": "Name of the workspace folder containing notebooks to run after the sync. All notebooks in the folder are executed in order. Use this for any post-deployment automation — role-level security, data validation, configuration, or similar tasks."
         },
         {
             "name": "enableDiagnostics",
