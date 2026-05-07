@@ -17,8 +17,6 @@ param
     [parameter(Mandatory = $false)] [String] $semanticModelsBinding = "[]",
     [parameter(Mandatory = $false)] [String] $postDeploymentFolder = "post-deployment",
     [parameter(Mandatory = $false)]
-    [ValidateSet("True", "False")] [String] $isWorkspaceGitEnabled = "False",
-    [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
     [parameter(Mandatory = $false)] [Bool] $developerView = $true,
     # Local-run auth - omit when running inside an ADO pipeline (AzurePowerShell@5 handles auth)
@@ -59,7 +57,10 @@ try {
     }
 
     #1. CONNECT WORKSPACE TO GIT
-    if ([Convert]::ToBoolean($isWorkspaceGitEnabled)) {
+    if (Test-WorkspaceGitConnected -workspaceId $workspace.id) {
+        if ([string]::IsNullOrWhiteSpace($fabricGitConnectionName)) {
+            throw "Workspace '$workspaceName' is connected to Git but 'fabricGitConnectionName' was not provided. The git sync cannot proceed."
+        }
         $script:fabricGitConnectionId = (Get-FabricConnection -connectionName $script:fabricGitConnectionName).id
         Connect-WorkspaceToGit -workspaceId $workspace.id -connectToGit $false | Out-Null
     }

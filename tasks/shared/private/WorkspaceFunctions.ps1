@@ -217,6 +217,34 @@ function Connect-WorkspaceToGit {
 
 }
 
+function Test-WorkspaceGitConnected {
+    param (
+        [parameter(Mandatory = $true)]  [String]         $workspaceId,
+        [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
+    )
+
+    $requestBody = @{ InitializationStrategy = "PreferWorkspace" } | ConvertTo-Json -Depth 4
+    $endPoint = "/workspaces/$workspaceId/git/initializeConnection"
+    $resp = Invoke-ApiEndpoint -endPoint $endPoint -method "POST" -body $requestBody -Context $Context
+
+    if ($resp.isException) {
+        # 409 = already initialized — workspace IS connected to git
+        if ($resp.responseObject.StatusCode -eq 409) {
+            return $true
+        }
+        # 400 = WorkspaceNotConnectedToGit (Fabric returns this as a non-2xx so the body is lost in the catch block)
+        if ($resp.responseObject.StatusCode -eq 400) {
+            return $false
+        }
+        # API-level error in a 2xx body (defensive — Fabric currently uses 400 for this case)
+        if ($resp.responseObject.ErrorCode -eq "WorkspaceNotConnectedToGit") {
+            return $false
+        }
+        throw (APIReturnedError -apiCallResponse $resp -intendedAction "probe git connection status")
+    }
+    return $true
+}
+
 function Add-WorkspaceUsers {
     param (
         [parameter(Mandatory = $true)]
