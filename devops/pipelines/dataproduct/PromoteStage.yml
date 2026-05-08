@@ -1,0 +1,58 @@
+trigger: none
+
+# resources:
+#   repositories:
+#     - repository: RTD
+#       type: git
+#       name: RTD/RTD
+#       ref: "$(Build.SourceBranch)"
+#       endpoint: CrossOrganizationAccess
+
+pool:
+  vmImage: "windows-latest"
+
+parameters:
+
+- name: deploymentPipelineName
+  displayName: "Deployment pipeline name"
+  type: string
+  default: "AutoDeploymentDemo" 
+
+- name: targetStageName
+  displayName: "Target stage"
+  type: string
+  default: "uat" 
+
+- name: enableDiagnostics
+  displayName: "Enable Diagnostics?"
+  type: boolean
+  default: False
+
+stages:
+  - stage: Promote
+    displayName: Promote Stage
+    variables:
+      - name: pipelineEnvironment
+        value: dev #I'd suggest to use the production variables
+      - template: ./deployment/auto/variables-${{ variables.pipelineEnvironment }}.yml
+
+    jobs:
+    - deployment: Deploy
+      displayName: Promote to ${{ parameters.targetStageName }}
+      environment: ${{variables.azdoEnvironment}}
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - checkout: none
+  
+              - task: FabricCatalystPromoteStage@1
+                displayName: 'FabricCatalyst - Auto Deployment'
+                inputs:
+                  azureSubscription: ${{ variables.azdoServiceConnection }}
+                  deploymentPipelineName: ${{ parameters.deploymentPipelineName }} 
+                  targetStageName: ${{ parameters.targetStageName }} 
+                  enableDiagnostics: ${{ parameters.enableDiagnostics }}
+      
+  
+

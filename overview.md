@@ -59,7 +59,7 @@ Environment-specific configuration uses **CSV files with `#{token}#` placeholder
     fabricGitConnectionName: 'my-fabric-devops-source-connection'
     organizationName: 'my-devops-org'
     projectName: 'my-devops-project'
-    repositoryName: 'products-git-repository'
+    repositoryName: 'my-data-product-git-repo'
     sourceBranchName: 'main'
     itemsGitFolder: '/fabric/gitenabled'
     deploymentDirectoryPath: 'devops/my-env-configuration'

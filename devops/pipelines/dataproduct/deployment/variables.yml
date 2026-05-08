@@ -1,0 +1,6 @@
+variables:
+  fabricGitConnectionName: "my-fabric-devops-source-connection"
+  gitProviderType: "AzureDevOps"
+  organizationName: "my-devops-org"
+  projectName: "my-devops-project"
+  repositoryName: "my-data-product-git-repo"

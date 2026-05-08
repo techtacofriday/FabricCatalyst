@@ -1,0 +1,96 @@
+{
+    "id": "b5c6d7e8-f9a0-4b1c-ad3e-4f5a6b7c8d9e",
+    "name": "FabricCatalystPipelineDeploy",
+    "friendlyName": "FabricCatalyst - Pipeline Deploy",
+    "description": "Creates a Fabric deployment pipeline and assigns workspaces to its stages. Run this once after all target workspaces have been provisioned by FabricCatalyst Auto Deployment.",
+    "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
+    "category": "Deploy",
+    "visibility": [
+        "Build",
+        "Release"
+    ],
+    "author": "TechTacoFriday",
+    "version": {
+        "Major": 1,
+        "Minor": 2,
+        "Patch": 0
+    },
+    "instanceNameFormat": "FabricCatalyst Pipeline Deploy $(deploymentPipelinePrefix)",
+    "groups": [
+        {
+            "name": "pipeline",
+            "displayName": "Deployment Pipeline",
+            "isExpanded": true
+        },
+        {
+            "name": "workspace",
+            "displayName": "Workspace",
+            "isExpanded": true
+        },
+        {
+            "name": "advanced",
+            "displayName": "Advanced",
+            "isExpanded": false
+        }
+    ],
+    "inputs": [
+        {
+            "name": "azureSubscription",
+            "type": "connectedService:AzureRM",
+            "label": "Azure Subscription",
+            "required": true,
+            "helpMarkDown": "Azure service connection with access to the Fabric tenant. Used to obtain tokens for the Fabric and Microsoft Graph APIs."
+        },
+        {
+            "name": "deploymentPipelinePrefix",
+            "type": "string",
+            "label": "Deployment Pipeline Name",
+            "required": true,
+            "groupName": "pipeline",
+            "helpMarkDown": "Name for the Fabric deployment pipeline. A 'pl_' prefix is added automatically, e.g. 'MyProduct' produces 'pl_MyProduct'."
+        },
+        {
+            "name": "pipelineAdminsList",
+            "type": "string",
+            "label": "Pipeline Administrators",
+            "required": false,
+            "defaultValue": "",
+            "groupName": "pipeline",
+            "helpMarkDown": "Semicolon-separated list of UPNs to assign as Pipeline Admin role. Leave empty to skip."
+        },
+        {
+            "name": "workspacePrefix",
+            "type": "string",
+            "label": "Workspace Prefix",
+            "required": true,
+            "groupName": "workspace",
+            "helpMarkDown": "Prefix used to resolve workspace names. Must match the prefix used in the Auto Deployment task, e.g. 'MyProduct' resolves to 'ws_MyProduct_dev'."
+        },
+        {
+            "name": "environmentList",
+            "type": "string",
+            "label": "Environments",
+            "required": true,
+            "defaultValue": "[{\"code\":\"dev\",\"order\":1},{\"code\":\"uat\",\"order\":2},{\"code\":\"prod\",\"order\":3}]",
+            "groupName": "workspace",
+            "helpMarkDown": "JSON array of all environments in pipeline stage order. Each entry requires 'code' and 'order'. Must contain at least 2 entries. Example: [{\"code\":\"dev\",\"order\":1},{\"code\":\"uat\",\"order\":2},{\"code\":\"prod\",\"order\":3}]"
+        },
+        {
+            "name": "enableDiagnostics",
+            "type": "boolean",
+            "label": "Enable Diagnostics",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "advanced",
+            "helpMarkDown": "Outputs detailed diagnostic messages to the pipeline log. Use for troubleshooting only."
+        }
+    ],
+    "execution": {
+        "Node20": {
+            "target": "index.js"
+        },
+        "Node16": {
+            "target": "index.js"
+        }
+    }
+}

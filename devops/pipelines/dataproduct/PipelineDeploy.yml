@@ -1,0 +1,66 @@
+trigger: none
+
+# resources:
+#   repositories:
+#     - repository: RTD
+#       type: git
+#       name: RTD/RTD
+#       ref: "$(Build.SourceBranch)"
+#       endpoint: CrossOrganizationAccess
+
+pool:
+  vmImage: "windows-latest"
+
+parameters:
+
+- name: workspacePrefix
+  displayName: "Fabric Workspace(s) Prefix"
+  type: string
+  default: "AutoDeploymentDemo" 
+
+- name: environmentList
+  displayName: "Environment(s)"
+  type: object
+  default:
+    - code: dev
+      gitEnabled: 1
+      order: 1
+
+- name: deploymentPipelinePrefix
+  displayName: "Fabric Pipeline Prefix"
+  type: string
+  default: "AutoDeploymentDemo"
+
+- name: pipelineAdminsList
+  displayName: "Fabric Pipeline Administrators"
+  type: string
+  default: "hector.lopez@innorway.onmicrosoft.com" 
+
+- name: enableDiagnostics
+  displayName: "Enable Diagnostics?"
+  type: boolean
+  default: False
+
+
+stages:
+  - stage: CreateDeploymentPipeline
+    displayName: Create Deployment Pipeline
+    variables:
+      - name: pipelineEnvironment
+        value: dev #I'd suggest to use the production variables
+      - template: ./deployment/auto/variables-${{ variables.pipelineEnvironment }}.yml
+    jobs:
+    - job: CreatePipeline
+      displayName: Create Deployment Pipeline ${{ parameters.deploymentPipelinePrefix }}
+      steps:
+        - checkout: none
+
+        - task: FabricCatalystPipelineDeploy@1
+          displayName: 'FabricCatalyst - Pipeline Deploy'
+          inputs:
+            azureSubscription: ${{ variables.azdoServiceConnection }}
+            workspacePrefix: ${{ parameters.workspacePrefix }}
+            environmentList: ${{ convertToJson(parameters.environmentList) }}
+            deploymentPipelinePrefix: ${{ parameters.deploymentPipelinePrefix }}
+            pipelineAdminsList: ${{ parameters.pipelineAdminsList }}
+            enableDiagnostics: ${{ parameters.enableDiagnostics }}
