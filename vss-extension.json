@@ -31,8 +31,10 @@
         { "path": "tasks/shared/private", "packagePath": "tasks/AutoDeploy/private" },
         { "path": "tasks/PromoteStage",    "packagePath": "tasks/PromoteStage" },
         { "path": "tasks/shared/private", "packagePath": "tasks/PromoteStage/private" },
-        { "path": "tasks/UpdateFromGit",  "packagePath": "tasks/UpdateFromGit" },
-        { "path": "tasks/shared/private", "packagePath": "tasks/UpdateFromGit/private" },
+        { "path": "tasks/UpdateFromGit",   "packagePath": "tasks/UpdateFromGit" },
+        { "path": "tasks/shared/private",  "packagePath": "tasks/UpdateFromGit/private" },
+        { "path": "tasks/PipelineDeploy",  "packagePath": "tasks/PipelineDeploy" },
+        { "path": "tasks/shared/private",  "packagePath": "tasks/PipelineDeploy/private" },
         { "path": "images/extension-icon.png", "addressable": true }
     ],
     "contributions": [
@@ -53,6 +55,12 @@
             "type": "ms.vss-distributed-task.task",
             "targets": [ "ms.vss-distributed-task.tasks" ],
             "properties": { "name": "tasks/UpdateFromGit" }
+        },
+        {
+            "id": "FabricCatalystPipelineDeploy",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [ "ms.vss-distributed-task.tasks" ],
+            "properties": { "name": "tasks/PipelineDeploy" }
         }
     ]
 }

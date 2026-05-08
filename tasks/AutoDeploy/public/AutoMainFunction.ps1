@@ -13,9 +13,6 @@ param
 (
     [parameter(Mandatory = $false)] [String] $fabricGitConnectionName,
     [parameter(Mandatory = $false)] [String] $workspacePrefix,
-    [parameter(Mandatory = $false)]
-    [ValidateSet("True", "False")] [String] $createDeploymentPipeline = "False",
-    [parameter(Mandatory = $false)] [String] $deploymentPipelineName,
     [parameter(Mandatory = $false)] [String] $capacityName,
     [parameter(Mandatory = $false)] [String] $domainName,
     [parameter(Mandatory = $false)] [String] $subDomainName,
@@ -33,7 +30,6 @@ param
     [parameter(Mandatory = $false)] [String] $workspaceContributorsList, #semicolon-separated UPNs
     [parameter(Mandatory = $false)] [String] $workspaceMembersList,      #semicolon-separated UPNs
     [parameter(Mandatory = $false)] [String] $workspaceViewersList,      #semicolon-separated UPNs
-    [parameter(Mandatory = $false)] [String] $pipelineAdminsList,        #semicolon-separated UPNs
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $customizeDeployment = "False",
     [parameter(Mandatory = $false)] [String] $deploymentDirectoryPath,
@@ -249,10 +245,6 @@ try {
     if ($script:workspacePrefix -notmatch '^[A-Za-z0-9-]+$') {
         throw "The value for workspacePrefix contains invalid characters. Only letters, numbers, and dashes are allowed."
     }
-    if ([Convert]::ToBoolean($script:createDeploymentPipeline) -and $script:deploymentPipelineName -notmatch '^[A-Za-z0-9-]+$') {
-        throw "The value for deploymentPipelineName contains invalid characters. Only letters, numbers, and dashes are allowed."
-    }
-
     if ([Convert]::ToBoolean($script:customizeDeployment)) {
         $missingParams = @()
         if ([string]::IsNullOrWhiteSpace($script:deploymentDirectoryPath)) { $missingParams += 'deploymentDirectoryPath' }
@@ -379,40 +371,6 @@ try {
     }
     else {
         Write-Message "Warning" "Skipping Workspace creation, no environment list was provided"
-    }
-
-    if ([Convert]::ToBoolean($script:createDeploymentPipeline)) {
-        if (![string]::IsNullOrWhiteSpace($script:deploymentPipelineName)) {
-            $deploymentPipelineFQN = "pl_{0}" -f $script:deploymentPipelineName
-            # Sort environments by explicit order if provided, otherwise preserve original array position
-            $sortedEnvironments = if ($environments | Where-Object { $null -ne $_.order -and $_.order -ne '' }) {
-                @($environments | Sort-Object { [int]$_.order })
-            } else {
-                @($environments)
-            }
-            $pipelineStages = @($sortedEnvironments | ForEach-Object {
-                [PSCustomObject]@{ displayName = $_.Code; isPublic = $false }
-            })
-            if ($pipelineStages.Count -lt 2) {
-                Write-Message "Warning" "Skipping pipeline creation: the Fabric API requires at least 2 stages but only $($pipelineStages.Count) environment(s) were provided."
-            } else {
-                Write-Message "Action" "Creating Fabric Pipeline $($deploymentPipelineFQN)"
-                $deploymentPipelineId = New-DeploymentPipeline -pipelineName $deploymentPipelineFQN -pipelineDescription $deploymentPipelineFQN -stages $pipelineStages
-                Write-Message "Action" "Adding Users to Pipeline $($deploymentPipelineFQN) ($($deploymentPipelineId))"
-                Add-PipelineUsers -deploymentPipelineId $deploymentPipelineId -upnList $script:pipelineAdminsList -deploymentPipelineAccessRight "Admin"
-                Write-Message "Action" "Assigning workspaces to pipeline stages"
-                for ($i = 0; $i -lt $sortedEnvironments.Count; $i++) {
-                    $environment = $sortedEnvironments[$i]
-                    $workspaceFQN = "ws_{0}_{1}" -f $script:workspacePrefix, $environment.Code
-                    Write-Message "Action" "Assigning workspace $($workspaceFQN) to stage (order $($i))"
-                    $workspaceId = New-FabricWorkspace -workspaceName $workspaceFQN -capacityId $capacityId
-                    Set-PipelineStageWorkspace -deploymentPipelineId $deploymentPipelineId -orderIndex $i -workspaceId $workspaceId
-                }
-            }
-        }
-        else {
-            Write-Message "Warning" "Skipping pipeline creation, no pipeline name was provided"
-        }
     }
 
     Write-Message "Info" "Script execution completed successfully."

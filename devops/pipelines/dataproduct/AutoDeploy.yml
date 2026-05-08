@@ -1,0 +1,146 @@
+trigger: none
+
+# resources:
+#   repositories:
+#     - repository: RTD
+#       type: git
+#       name: RTD/RTD
+#       ref: "$(Build.SourceBranch)"
+#       endpoint: CrossOrganizationAccess
+
+pool:
+  vmImage: "windows-latest"
+
+parameters:
+
+- name: domainName
+  displayName: "Fabric Domain"
+  type: string
+  default: "FabricCatalyst" 
+
+- name: subDomainName
+  displayName: "Fabric Sub-Domain"
+  type: string
+  default: "AutoDeployment" 
+
+- name: workspacePrefix
+  displayName: "Fabric Workspace(s) Prefix"
+  type: string
+  default: "AutoDeploymentDemo" 
+
+- name: environmentList
+  displayName: "Environment(s)"
+  type: object
+  default:
+    - code: dev
+      gitEnabled: 1
+      order: 1
+
+- name: workspaceAdminsList
+  displayName: "Fabric Workspace(s) Administrators"
+  type: string
+  default: "hector.lopez@innorway.onmicrosoft.com" 
+
+- name: createDeploymentPipeline
+  displayName: "Create Deployment Pipeline?"
+  type: boolean
+  default: False
+
+- name: deploymentPipelinePrefix
+  displayName: "Fabric Pipeline Prefix"
+  type: string
+  default: "AutoDeploymentDemo"
+
+- name: pipelineAdminsList
+  displayName: "Fabric Pipeline Administrators"
+  type: string
+  default: "hector.lopez@innorway.onmicrosoft.com" 
+
+- name: useEmptyBranch
+  displayName: "Create empty branch?"
+  type: boolean
+  default: False
+
+- name: sourceBranchName
+  displayName: "Source Branch Name"
+  type: string
+  default: "main"
+
+- name: itemsGitFolder
+  displayName: "Git Folder with Fabric Items"
+  type: string
+  default: "/fabric/gitenabled"
+
+- name: customizeDeployment
+  displayName: "Customize Deployment?"
+  type: boolean
+  default: False
+
+- name: enableDiagnostics
+  displayName: "Enable Diagnostics?"
+  type: boolean
+  default: False
+
+
+stages:
+  - ${{ each envItem in parameters.environmentList }}:
+    - stage: Deploy_${{envItem.code}}
+      displayName: Stage Deploy ${{envItem.code}}
+      variables:
+        - template: ./deployment/variables.yml
+        - template: ./deployment/auto/variables-${{envItem.code}}.yml
+
+      jobs:
+      - deployment: Deploy
+        displayName: Deploy to ${{envItem.code}}
+        environment: ${{variables.azdoEnvironment}}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+
+                - task: FabricCatalystAutoDeploy@1
+                  displayName: 'FabricCatalyst - Auto Deployment'
+                  inputs:
+                    azureSubscription: ${{ variables.azdoServiceConnection }}
+                    workspacePrefix: ${{ parameters.workspacePrefix }}
+                    capacityName: ${{ variables.fabricCapacityName }}
+                    environmentList: ${{ convertToJson(createArray(envItem)) }}
+                    domainName: ${{ parameters.domainName }}
+                    subDomainName: ${{ parameters.subDomainName }}
+                    workspaceAdminsList: ${{ parameters.workspaceAdminsList }}
+                    fabricGitConnectionName: ${{ variables.fabricGitConnectionName }}
+                    organizationName: ${{ variables.organizationName }}
+                    projectName: ${{ variables.projectName }}
+                    repositoryName: ${{ variables.repositoryName }}
+                    sourceBranchName: ${{ parameters.sourceBranchName }}
+                    itemsGitFolder: ${{ parameters.itemsGitFolder }}
+                    useEmptyBranch: ${{ parameters.useEmptyBranch }}
+                    createDeploymentPipeline: false
+                    deploymentPipelineName: ${{ parameters.deploymentPipelinePrefix }}
+                    pipelineAdminsList: ${{ parameters.pipelineAdminsList }}
+                    deploymentDirectoryPath: ${{ variables.deploymentDirectoryPath }}
+                    customizeDeployment: ${{ parameters.customizeDeployment }}
+                    enableDiagnostics: ${{ parameters.enableDiagnostics }}
+
+  - ${{ if eq(parameters.createDeploymentPipeline, true) }}:
+    - stage: CreateDeploymentPipeline
+      displayName: Create Deployment Pipeline
+      variables:
+        - template: ./deployment/variables.yml
+      jobs:
+      - job: CreatePipeline
+        displayName: Create Deployment Pipeline ${{ parameters.deploymentPipelinePrefix }}
+        steps:
+          - checkout: none
+
+          - task: FabricCatalystPipelineDeploy@1
+            displayName: 'FabricCatalyst - Pipeline Deploy'
+            inputs:
+              azureSubscription: ${{ variables.azdoServiceConnection }}
+              workspacePrefix: ${{ parameters.workspacePrefix }}
+              environmentList: ${{ convertToJson(parameters.environmentList) }}
+              deploymentPipelinePrefix: ${{ parameters.deploymentPipelinePrefix }}
+              pipelineAdminsList: ${{ parameters.pipelineAdminsList }}
+              enableDiagnostics: ${{ parameters.enableDiagnostics }}

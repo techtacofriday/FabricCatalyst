@@ -18,11 +18,8 @@ $workspaceAdminsList         = $env:FC_WORKSPACEADMINSLIST
 $workspaceContributorsList   = $env:FC_WORKSPACECONTRIBUTORSLIST
 $workspaceMembersList        = $env:FC_WORKSPACEMEMBERSLIST
 $workspaceViewersList        = $env:FC_WORKSPACEVIEWERSLIST
-$deploymentPipelineName      = $env:FC_DEPLOYMENTPIPELINENAME
-$pipelineAdminsList          = $env:FC_PIPELINEADMINSLIST
 $fabricItemsLocation      = if ($env:FC_FABRICITEMSLOCATION){ $env:FC_FABRICITEMSLOCATION } else { 'LocalDirectory' }
 $useEmptyBranch           = $env:FC_USEEMPTYBRANCH
-$createDeploymentPipeline = $env:FC_CREATEDEPLOYMENTPIPELINE
 $customizeDeployment      = $env:FC_CUSTOMIZEDEPLOYMENT
 $enableDiagnostics        = $env:FC_ENABLEDIAGNOSTICS
 #endregion
@@ -57,7 +54,6 @@ Write-Host "##[section]Starting FabricCatalyst Auto Deployment - workspace prefi
 $params = @{
     fabricGitConnectionName  = $fabricGitConnectionName
     workspacePrefix          = $workspacePrefix
-    createDeploymentPipeline = $createDeploymentPipeline
     capacityName             = $capacityName
     organizationName         = $organizationName
     projectName              = $projectName
@@ -74,13 +70,11 @@ $params = @{
 }
 
 # Optional parameters: only pass when non-empty so script defaults take effect
-if (![string]::IsNullOrWhiteSpace($deploymentPipelineName))    { $params.deploymentPipelineName    = $deploymentPipelineName }
 if (![string]::IsNullOrWhiteSpace($domainName))                { $params.domainName                = $domainName }
 if (![string]::IsNullOrWhiteSpace($subDomainName))             { $params.subDomainName             = $subDomainName }
 if (![string]::IsNullOrWhiteSpace($workspaceContributorsList)) { $params.workspaceContributorsList = $workspaceContributorsList }
 if (![string]::IsNullOrWhiteSpace($workspaceMembersList))      { $params.workspaceMembersList      = $workspaceMembersList }
 if (![string]::IsNullOrWhiteSpace($workspaceViewersList))      { $params.workspaceViewersList      = $workspaceViewersList }
-if (![string]::IsNullOrWhiteSpace($pipelineAdminsList))        { $params.pipelineAdminsList        = $pipelineAdminsList }
 
 try {
     & "$PSScriptRoot\public\AutoMainFunction.ps1" @params
