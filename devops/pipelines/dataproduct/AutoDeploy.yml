@@ -106,7 +106,7 @@ stages:
                     azureSubscription: ${{ variables.azdoServiceConnection }}
                     workspacePrefix: ${{ parameters.workspacePrefix }}
                     capacityName: ${{ variables.fabricCapacityName }}
-                    environmentList: ${{ convertToJson(createArray(envItem)) }}
+                    environmentList: ${{ convertToJson(envItem) }}
                     domainName: ${{ parameters.domainName }}
                     subDomainName: ${{ parameters.subDomainName }}
                     workspaceAdminsList: ${{ parameters.workspaceAdminsList }}
@@ -117,9 +117,6 @@ stages:
                     sourceBranchName: ${{ parameters.sourceBranchName }}
                     itemsGitFolder: ${{ parameters.itemsGitFolder }}
                     useEmptyBranch: ${{ parameters.useEmptyBranch }}
-                    createDeploymentPipeline: false
-                    deploymentPipelineName: ${{ parameters.deploymentPipelinePrefix }}
-                    pipelineAdminsList: ${{ parameters.pipelineAdminsList }}
                     deploymentDirectoryPath: ${{ variables.deploymentDirectoryPath }}
                     customizeDeployment: ${{ parameters.customizeDeployment }}
                     enableDiagnostics: ${{ parameters.enableDiagnostics }}
@@ -128,7 +125,9 @@ stages:
     - stage: CreateDeploymentPipeline
       displayName: Create Deployment Pipeline
       variables:
-        - template: ./deployment/variables.yml
+        - name: pipelineEnvironment
+          value: dev #I'd suggest to use the production variables
+        - template: ./deployment/auto/variables-${{ variables.pipelineEnvironment }}.yml
       jobs:
       - job: CreatePipeline
         displayName: Create Deployment Pipeline ${{ parameters.deploymentPipelinePrefix }}

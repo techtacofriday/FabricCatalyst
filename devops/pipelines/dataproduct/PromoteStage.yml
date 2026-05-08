@@ -32,7 +32,9 @@ stages:
   - stage: Promote
     displayName: Promote Stage
     variables:
-      - template: ./deployment/variables.yml
+      - name: pipelineEnvironment
+        value: dev #I'd suggest to use the production variables
+      - template: ./deployment/auto/variables-${{ variables.pipelineEnvironment }}.yml
 
     jobs:
     - deployment: Deploy

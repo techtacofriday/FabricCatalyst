@@ -12,7 +12,7 @@
     "author": "TechTacoFriday",
     "version": {
         "Major": 1,
-        "Minor": 0,
+        "Minor": 1,
         "Patch": 0
     },
     "instanceNameFormat": "FabricCatalyst Pipeline Deploy $(deploymentPipelinePrefix)",
@@ -65,14 +65,6 @@
             "required": true,
             "groupName": "workspace",
             "helpMarkDown": "Prefix used to resolve workspace names. Must match the prefix used in the Auto Deployment task, e.g. 'MyProduct' resolves to 'ws_MyProduct_dev'."
-        },
-        {
-            "name": "capacityName",
-            "type": "string",
-            "label": "Capacity Name",
-            "required": true,
-            "groupName": "workspace",
-            "helpMarkDown": "Display name of the active Fabric capacity. Used to resolve existing workspace IDs."
         },
         {
             "name": "environmentList",

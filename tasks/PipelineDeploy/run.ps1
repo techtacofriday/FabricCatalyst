@@ -3,7 +3,6 @@ param()
 
 #region Read inputs forwarded by index.js via FC_* env vars
 $workspacePrefix        = $env:FC_WORKSPACEPREFIX
-$capacityName           = $env:FC_CAPACITYNAME
 $environmentList        = $env:FC_ENVIRONMENTLIST
 $deploymentPipelinePrefix = $env:FC_DEPLOYMENTPIPELINEPREFIX
 $pipelineAdminsList     = $env:FC_PIPELINEADMINSLIST
@@ -38,7 +37,6 @@ Write-Host "##[section]Starting FabricCatalyst Pipeline Deployment - pipeline: $
 
 $params = @{
     workspacePrefix        = $workspacePrefix
-    capacityName           = $capacityName
     environmentList        = $environmentList
     deploymentPipelinePrefix = $deploymentPipelinePrefix
     enableDiagnostics      = $enableDiagnostics

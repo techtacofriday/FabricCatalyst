@@ -37,7 +37,7 @@ stages:
   - stage: UpdateFromGit
     displayName: Update From Git
     variables:
-      - template: ./deployment/variables.yml
+      - template: ./deployment/auto/variables-${{ split(parameters.workspaceName, '_')[2] }}.yml
 
     jobs:
     - deployment: Deploy

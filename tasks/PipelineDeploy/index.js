@@ -22,7 +22,7 @@ function run() {
 
         // String inputs
         for (const name of [
-            'workspacePrefix', 'capacityName', 'environmentList',
+            'workspacePrefix', 'environmentList',
             'deploymentPipelinePrefix', 'pipelineAdminsList',
         ]) {
             env[`FC_${name.toUpperCase()}`] = tl.getInput(name, false) || '';
