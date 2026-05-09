@@ -1010,3 +1010,36 @@ function Get-DeploymentCsvContent {
     }
     return ($csvContent -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
 }
+
+function Get-JsonMapContent {
+    param (
+        [parameter(Mandatory = $true)]  [String]         $mapFilePath,
+        [parameter(Mandatory = $true)]  [String]         $branchName,
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+    )
+
+    if (Test-Path $mapFilePath) {
+        return Get-FileContent -filePath $mapFilePath | ConvertFrom-Json
+    }
+
+    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }         else { $script:azdoBaseUrl }
+    $org      = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName }    else { $script:organizationName }
+    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }         else { $script:projectName }
+    $repo     = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }      else { $script:repositoryName }
+    $headers  = if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
+
+    $refSourceBranchName = $branchName
+    if ($branchName -match "^refs/heads/") {
+        $refSourceBranchName = $branchName -replace "^refs/heads/", ""
+    }
+
+    $downloadUrl = "$($azdoBase)/$($org)/$($project)/_apis/git/repositories/$($repo)/items?path=$($mapFilePath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&resolveLfs=true&api-version=7.1-preview.1"
+
+    $targetPath = Get-RemoteFile `
+        -FilePath $mapFilePath.TrimStart("/") `
+        -DownloadUrl $downloadUrl `
+        -localFolder ".\temp" `
+        -Headers $headers
+
+    return Get-FileContent -filePath $targetPath | ConvertFrom-Json
+}

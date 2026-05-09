@@ -371,6 +371,7 @@ local/
 *.vsix
 dist/
 
+/fabric
 /temp
 /.claude/settings.local.json
 /devops/infrascode/fabriccatalyst/main.json

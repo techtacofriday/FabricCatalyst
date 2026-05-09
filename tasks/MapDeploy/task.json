@@ -12,8 +12,8 @@
     "author": "TechTacoFriday",
     "version": {
         "Major": 1,
-        "Minor": 0,
-        "Patch": 1
+        "Minor": 1,
+        "Patch": 0
     },
     "instanceNameFormat": "FabricCatalyst Map Deploy $(jsonMapFileName)",
     "groups": [
@@ -55,7 +55,7 @@
             "label": "Azure DevOps Project",
             "required": true,
             "groupName": "source",
-            "helpMarkDown": "Azure DevOps project containing the JSON map file and deployment configuration."
+            "helpMarkDown": "Azure DevOps project containing the JSON map file and item definitions."
         },
         {
             "name": "repositoryName",
@@ -63,7 +63,7 @@
             "label": "Repository Name",
             "required": true,
             "groupName": "source",
-            "helpMarkDown": "Repository that holds the JSON map file and deployment configuration."
+            "helpMarkDown": "Repository that holds the JSON map file and item definitions."
         },
         {
             "name": "sourceBranchName",
@@ -72,7 +72,7 @@
             "required": true,
             "defaultValue": "main",
             "groupName": "source",
-            "helpMarkDown": "Branch from which to read the JSON map file."
+            "helpMarkDown": "Branch from which to read the JSON map file and item definitions."
         },
         {
             "name": "jsonMapFileName",
@@ -99,7 +99,15 @@
             "required": true,
             "defaultValue": "devops/pipelines/fabriccatalyst/dataproduct/deployment",
             "groupName": "configuration",
-            "helpMarkDown": "Path in the repository to the root of the deployment configuration folder."
+            "helpMarkDown": "Path in the repository to the root of the deployment configuration folder containing the JSON map file."
+        },
+        {
+            "name": "deploymentDefinitionsPath",
+            "type": "string",
+            "label": "Deployment Definitions Path",
+            "required": false,
+            "groupName": "configuration",
+            "helpMarkDown": "Path in the repository to the root of the Fabric item definition files (e.g. fabric/gitdisabled). Required only when the map includes items with definition parts such as Notebooks, Semantic Models, Data Pipelines, or Reports."
         },
         {
             "name": "fabricItemsLocation",
