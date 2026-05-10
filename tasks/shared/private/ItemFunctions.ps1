@@ -7,16 +7,18 @@
 ###############################################################################
 function Wait-FabricNotebookJob {
   param (
-      [parameter(Mandatory = $true)]  [String] $location,
-      [parameter(Mandatory = $false)] [int]    $retryInterval = 5,
-      [parameter(Mandatory = $false)] [int]    $attempMax = 6
+      [parameter(Mandatory = $true)]  [String]         $location,
+      [parameter(Mandatory = $false)] [int]             $retryInterval = 5,
+      [parameter(Mandatory = $false)] [int]             $attempMax = 6,
+      [parameter(Mandatory = $false)] [PSCustomObject]  $Context = $null
   )
+    $resolvedBaseUrl = if ($null -ne $Context) { $Context.FabricBaseUrl } else { $script:fabricBaseUrl }
     $attempCount = 1
-    $endPoint = "/" + $location.Substring(($script:fabricBaseUrl + "/v1").Length).TrimStart('/')
+    $endPoint = "/" + $location.Substring(($resolvedBaseUrl + "/v1").Length).TrimStart('/')
     while ($attempCount -lt $attempMax) {
         Write-Message "Action" "Waiting $($retryInterval) secs for notebook job to complete (attempt $($attempCount)/$($attempMax))"
         Start-Sleep -Seconds $retryInterval
-        $lroResponse = Invoke-ApiEndpoint -endPoint $endPoint -method "GET"
+        $lroResponse = Invoke-ApiEndpoint -endPoint $endPoint -method "GET" -Context $Context
         if ($lroResponse.isException -eq $false) {
             $operationState = $lroResponse.responseObject.Content | ConvertFrom-Json
             if ($operationState.status -eq "Completed") {
@@ -210,15 +212,17 @@ function Set-SemanticModelConnection {
 
 function New-ItemDefinitionParts {
     param (
-        [parameter(Mandatory = $true)] [string] $itemName,
-        [parameter(Mandatory = $true)] [string] $itemType,
-        [parameter(Mandatory = $false)] [String] $csvFilePath = $null,
-        [parameter(Mandatory = $false)] [String] $dfnDirectory = $null,
-        [parameter(Mandatory = $true)] [PSCustomObject] $dfnParts,
+        [parameter(Mandatory = $true)]  [string]         $itemName,
+        [parameter(Mandatory = $true)]  [string]         $itemType,
+        [parameter(Mandatory = $false)] [String]         $csvFilePath = $null,
+        [parameter(Mandatory = $false)] [String]         $dfnDirectory = $null,
+        [parameter(Mandatory = $true)]  [PSCustomObject] $dfnParts,
+        [parameter(Mandatory = $false)] [PSCustomObject] $catalog = $null,
         [parameter(Mandatory = $false)]
         [ValidateSet("True", "False")] [String] $enableDiagnostics = "False"
     )
 
+    $resolvedCatalog = if ($null -ne $catalog) { $catalog } else { $script:fabricItemsPropertiesCatalog }
     $requestDfnParts = [PSCustomObject]@()
 
     foreach ($dfnPart in $dfnParts) {
@@ -241,6 +245,7 @@ function New-ItemDefinitionParts {
                         -csvFilePath $csvFilePath `
                         -dfnDirectory $dfnDirectory `
                         -dfnParts $folderContents `
+                        -catalog $resolvedCatalog `
                         -enableDiagnostics $enableDiagnostics
                 }
                 continue
@@ -265,17 +270,13 @@ function New-ItemDefinitionParts {
                 }
             }
             else {
-                Write-Message "Debug" "csvData(InlineSource)>dfnPart.csvData count=$($dfnPart.csvData.Count); catalog keys=$($script:fabricItemsPropertiesCatalog.PSObject.Properties.Name -join ',')"
                 foreach ($detokanizedJsonValue in $dfnPart.csvData) {
-                    Write-Message "Debug" "csvData(InlineSource)>jsonPath=$($detokanizedJsonValue.jsonPath); token(raw)=$($detokanizedJsonValue.token)"
-                    $resolved = Invoke-TokenSubstitution -line $detokanizedJsonValue.token -tokens $script:fabricItemsPropertiesCatalog
-                    Write-Message "Debug" "csvData(InlineSource)>token(resolved)=$resolved"
-                    $csvData[$detokanizedJsonValue.jsonPath] = $resolved
+                    $csvData[$detokanizedJsonValue.jsonPath] = Invoke-TokenSubstitution -line $detokanizedJsonValue.token -tokens $resolvedCatalog
                 }
             }
 
-            # If updateJsonValues is true, modify the JSON
-            if ([bool]$dfnPart.updateJsonValues) {
+            # If updateJsonValues is true, or inline csvData is present, modify the JSON
+            if ([bool]$dfnPart.updateJsonValues -or $csvData.Count -gt 0) {
                 $dfnFileExtension = [System.IO.Path]::GetExtension($dfnFilePath)
                 if ($dfnFileExtension -eq ".py") {
                     $metadataPattern = [regex]::new('# METADATA \*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*(.*?)# CELL \*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*', 'Singleline')
