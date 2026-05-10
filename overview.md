@@ -22,6 +22,12 @@ Promotes items from one Fabric deployment pipeline stage to the next, identified
 
 Use this when you want to advance content through a Fabric deployment pipeline (dev → test → prod) from an ADO pipeline without touching the Fabric UI.
 
+### FabricCatalyst - Map Deployment
+
+Deploys Microsoft Fabric items defined in a JSON map file. The map describes a domain → sub-domain → workspace → items hierarchy. At runtime the task builds a token catalog from resolved workspace and item IDs, then uses that catalog to patch item definition files before deploying them to Fabric.
+
+Use this for SQL-to-Fabric migration scenarios where workspaces and items are not yet in Git but you need repeatable, environment-aware deployments from a declarative map file.
+
 ### FabricCatalyst - Update From Git
 
 Syncs a Fabric workspace from its connected Git branch. Optionally patches Git credentials before the sync, binds semantic models to named connections, and runs post-sync notebooks (e.g. row-level security setup) from a designated workspace folder.
