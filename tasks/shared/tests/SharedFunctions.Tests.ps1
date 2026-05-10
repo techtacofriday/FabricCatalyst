@@ -248,7 +248,7 @@ Describe 'Invoke-TokenSubstitution' {
 }
 
 # =============================================================================
-Describe 'Invoke-TokenReplacement' {
+Describe 'Resolve-DeploymentCsvContent' {
 
     BeforeAll {
         $catalog = [PSCustomObject]@{
@@ -259,14 +259,14 @@ Describe 'Invoke-TokenReplacement' {
 
     It 'replaces tokens that appear in the provided content lines' {
         $lines  = @('row,Type,path,#{HomeWorkspace.Id}#')
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         $result | Should -Match 'ws-abc'
         $result | Should -Not -Match '#{HomeWorkspace.Id}#'
     }
 
     It 'appends the six default catalog rows (Notebook/SemanticModel/Report mappings)' {
         $lines  = @('header')
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         $result | Should -Match 'Notebook'
         $result | Should -Match 'SemanticModel'
         $result | Should -Match 'Report'
@@ -275,20 +275,20 @@ Describe 'Invoke-TokenReplacement' {
     It 'resolves tokens inside the appended default rows' {
         # The default rows reference #{HomeWorkspace.Id}# — verify it is substituted
         $lines  = @()
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         $result | Should -Match 'ws-abc'
         $result | Should -Not -Match '#{HomeWorkspace.Id}#'
     }
 
     It 'joins all rows with CRLF' {
         $lines  = @('line1', 'line2')
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         $result | Should -Match "`r`n"
     }
 
     It 'returns a single string, not an array' {
         $lines  = @('a', 'b')
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         ($result -is [string]) | Should -Be $true
     }
 }

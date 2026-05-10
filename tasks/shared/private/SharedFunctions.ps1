@@ -441,7 +441,7 @@ function Invoke-DetokenizeConfigFile() {
     )
     $resolvedCatalog = if ($null -ne $catalog) { $catalog } else { $script:fabricItemsPropertiesCatalog }
     $newCsvFilePath = ".\temp\fabricItemsTier$($customFabricItemsTier)\$($deploymentConfigFileName)"
-    $updatedCsvContent = Invoke-TokenReplacement -content $csvContent -tokens $resolvedCatalog # Replace tokens in the CSV content
+    $updatedCsvContent = Resolve-DeploymentCsvContent -content $csvContent -tokens $resolvedCatalog # Replace tokens in the CSV content
     $fncResult = Export-ContentToFile -content $updatedCsvContent -filePath $newCsvFilePath
     if ($fncResult) {
         return $newCsvFilePath
@@ -470,7 +470,7 @@ function Invoke-TokenSubstitution {
     return $line
 }
 
-function Invoke-TokenReplacement {
+function Resolve-DeploymentCsvContent {
     param (
         [string[]]$content,          # Content of the CSV file
         [PSCustomObject]$tokens      # Object containing token keys and values
