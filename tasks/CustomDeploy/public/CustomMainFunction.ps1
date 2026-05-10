@@ -344,8 +344,8 @@ try {
             Write-Message "Action" "Adding Users to Workspace $($workspaceFQN) ($($workspaceId))"
             Add-WorkspaceUsers -workspaceId $workspaceId -upnList $script:workspaceAdminsList -workspaceRole "Admin"
             # Adding the workspace id to my properties catalog
-            $script:fabricItemsPropertiesCatalog | Add-Member -MemberType NoteProperty -Name "Home.Workspace.Id" -Value $workspaceId -Force
-            $script:fabricItemsPropertiesCatalog | Add-Member -MemberType NoteProperty -Name "Home.Workspace.Name" -Value $workspaceFQN -Force
+            $script:fabricItemsPropertiesCatalog | Add-Member -MemberType NoteProperty -Name "HomeWorkspace.Id" -Value $workspaceId -Force
+            $script:fabricItemsPropertiesCatalog | Add-Member -MemberType NoteProperty -Name "HomeWorkspace.Name" -Value $workspaceFQN -Force
             if([bool]$environment.gitEnabled) {
                 Write-Message "Warning" "Skipping Git-enabling this workspace, this functionality is not currently support on Custom Deployment. "
             }
