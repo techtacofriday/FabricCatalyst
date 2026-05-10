@@ -355,7 +355,7 @@ try {
                 $fabricItemsDiscovered = ScanWorkspaceForSupportedItems -workspaceId $workspaceId
                 if ($null -ne $fabricItemsDiscovered) {
                     $script:fabricItemsPropertiesCatalog = [PSCustomObject]@{}
-                    $script:fabricItemsPropertiesCatalog | Add-Member -MemberType NoteProperty -Name "Home.Workspace.Id" -Value $workspaceId
+                    $script:fabricItemsPropertiesCatalog | Add-Member -MemberType NoteProperty -Name "HomeWorkspace.Id" -Value $workspaceId
                     Invoke-FabricItemCustomization `
                         -workspaceFQN $workspaceFQN `
                         -workspaceId $workspaceId `

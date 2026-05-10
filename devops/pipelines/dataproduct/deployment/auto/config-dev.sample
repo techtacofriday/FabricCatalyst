@@ -1,6 +1,6 @@
 name,type,jsonPath,token
 *,Notebook,dependencies.lakehouse.known_lakehouses[0].id,"#{LH_PublicHolidays.Lakehouse.id}#"
-*,Notebook,dependencies.environment.workspaceId,"#{Home.Workspace.Id}#"
+*,Notebook,dependencies.environment.workspaceId,"#{HomeWorkspace.Id}#"
 *,Notebook,dependencies.lakehouse.default_lakehouse,"#{LH_PublicHolidays.Lakehouse.Id}#"
 *,Notebook,dependencies.lakehouse.default_lakehouse_name,"#{LH_PublicHolidays.Lakehouse.Name}#"
-*,Notebook,dependencies.lakehouse.default_lakehouse_workspace_id,"#{Home.Workspace.Id}#"
+*,Notebook,dependencies.lakehouse.default_lakehouse_workspace_id,"#{HomeWorkspace.Id}#"

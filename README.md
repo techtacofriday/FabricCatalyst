@@ -25,6 +25,7 @@ It is an Azure DevOps extension that handles workspace provisioning, Git wiring,
 | Task | When to use it |
 |---|---|
 | **FabricCatalyst - Auto Deployment** | Git-connected workspaces across environments. Discovers items from a branch and deploys in dependency order. The primary task for teams adopting DevOps-first Fabric workflows. |
+| **FabricCatalyst - Map Deployment** | JSON-map-driven deployment. The map declares a domain → sub-domain → workspace → items hierarchy; the task provisions each workspace and deploys items with inline environment-specific configuration. Use for SQL-to-Fabric migration scenarios where items are not yet Git-connected. |
 | **FabricCatalyst - Promote Stage** | Promotes items from one Fabric deployment pipeline stage to the next, identified by display name. Use when advancing content through dev → test → prod inside a Fabric deployment pipeline. |
 | **FabricCatalyst - Update From Git** | Syncs a Fabric workspace from its connected Git branch. Optionally patches Git credentials, binds semantic models to connections, and runs post-sync notebooks for row-level security setup. |
 
@@ -87,6 +88,24 @@ Minimal Auto Deployment example:
 ```
 
 This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, deploys all Fabric items in tier order, and syncs workspace role assignments.
+
+**Map Deployment example:**
+
+```yaml
+- task: FabricCatalystMapDeploy@1
+  displayName: Deploy Fabric items from map
+  inputs:
+    azureSubscription: 'my-fabric-service-connection'
+    organizationName: 'myorg'
+    projectName: 'MyProject'
+    repositoryName: 'fabric-items'
+    sourceBranchName: 'main'
+    jsonMapFileName: '_sqlMeetsFabric.json'
+    deploymentDirectoryPath: 'devops/pipelines/fabriccatalyst/dataproduct/deployment/map'
+    deploymentDefinitionsPath: 'devops/pipelines/fabriccatalyst/dataproduct/deployment/map/definitions'
+```
+
+The task reads the JSON map file from `deploymentDirectoryPath`, provisions each workspace declared in the map, and deploys the items listed under each workspace. Item definition files (Notebooks, Semantic Models, Data Pipelines) are read from `deploymentDefinitionsPath`.
 
 **Promote Stage example:**
 
@@ -282,6 +301,98 @@ Each task has full inline help in the ADO pipeline editor. Key parameters per ta
 | `deploymentDirectoryPath` | Root path to deployment configuration folder in the repository |
 | `customizeDeployment` | When true, applies token substitution from the deployment CSV before deploying |
 | `enableDiagnostics` | Verbose logging for troubleshooting |
+
+**Map Deployment**
+
+| Parameter | Description |
+|---|---|
+| `azureSubscription` | Service connection for SP authentication |
+| `organizationName` | Azure DevOps organization name (the part after dev.azure.com/) |
+| `projectName` | Azure DevOps project containing the map file and item definitions |
+| `repositoryName` | Repository that holds the map file and item definitions |
+| `sourceBranchName` | Branch from which to read the map file and item definitions |
+| `jsonMapFileName` | Name of the JSON map file (default: `_sqlMeetsFabric.json`) |
+| `deploymentDirectoryPath` | Path in the repository to the folder containing the JSON map file |
+| `deploymentDefinitionsPath` | Path in the repository to the root of item definition files (Notebooks, Semantic Models, etc.); required when the map includes items with definition parts |
+| `fabricItemsLocation` | Source for item definition files (default: `LocalDirectory`) |
+| `updateDefinition` | When true, pushes updated item definitions to the deployed workspace |
+| `enableDiagnostics` | Verbose logging for troubleshooting |
+
+### JSON map structure
+
+The map file declares the full topology in a single JSON document. The task processes it top-down: domains → sub-domains → workspaces → items.
+
+```json
+{
+  "domains": [
+    {
+      "name": "MyDomain",
+      "active": 1,
+      "subDomains": [
+        {
+          "name": "MySubDomain",
+          "active": 1,
+          "workspaces": [
+            {
+              "name": "Group-01",
+              "active": 1,
+              "capacity": "my-fabric-capacity",
+              "items": {
+                "lakehouses": [
+                  { "name": "LH_Bronze", "active": 1 }
+                ],
+                "Notebooks": [
+                  {
+                    "name": "NB_LoadTable",
+                    "active": 1,
+                    "directory": "NB_LoadTable.Notebook",
+                    "dfnFormat": "ipynb",
+                    "dfnParts": [
+                      {
+                        "fileName": "notebook-content.py",
+                        "csvData": [
+                          {
+                            "jsonPath": "dependencies.environment.workspaceId",
+                            "token": "#{Group-01.Id}#"
+                          },
+                          {
+                            "jsonPath": "dependencies.lakehouse.default_lakehouse",
+                            "token": "#{Group-01.LH_Bronze.Id}#"
+                          },
+                          {
+                            "jsonPath": "dependencies.lakehouse.default_lakehouse_workspace_id",
+                            "token": "#{Group-01.Id}#"
+                          }
+                        ]
+                      },
+                      { "fileName": ".platform" }
+                    ]
+                  }
+                ]
+              },
+              "rbacAssignments": [
+                { "type": "Admins", "upnList": "user@example.com" }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+```
+
+#### Token naming in map mode
+
+Map mode builds a token catalog from workspace and item IDs as they are provisioned. Token names follow a `WorkspaceName.ItemName.Property` hierarchy using the names declared in the map:
+
+| Token | Resolves to |
+|---|---|
+| `#{Group-01.Id}#` | ID of the workspace named `Group-01` |
+| `#{Group-01.LH_Bronze.Id}#` | ID of the lakehouse named `LH_Bronze` in `Group-01` |
+| `#{Group-01.LH_Bronze.Name}#` | Display name of the same lakehouse |
+
+The `csvData` array inside a definition part provides inline token substitution — the same mechanism used by Auto Deployment CSV files, but declared directly in the map. Each entry targets a `jsonPath` inside the definition file and replaces it with the resolved token value before the item is deployed.
 
 **Promote Stage**
 

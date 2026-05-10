@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "fabriccatalyst",
     "publisher": "techtacofriday",
-    "version": "1.4.0",
+    "version": "1.5.2",
     "name": "FabricCatalyst",
     "description": "Azure DevOps tasks for deploying and managing Microsoft Fabric items across environments.",
     "public": true,
@@ -29,6 +29,8 @@
     "files": [
         { "path": "tasks/AutoDeploy",     "packagePath": "tasks/AutoDeploy" },
         { "path": "tasks/shared/private", "packagePath": "tasks/AutoDeploy/private" },
+{ "path": "tasks/MapDeploy",      "packagePath": "tasks/MapDeploy" },
+        { "path": "tasks/shared/private", "packagePath": "tasks/MapDeploy/private" },
         { "path": "tasks/PromoteStage",    "packagePath": "tasks/PromoteStage" },
         { "path": "tasks/shared/private", "packagePath": "tasks/PromoteStage/private" },
         { "path": "tasks/UpdateFromGit",   "packagePath": "tasks/UpdateFromGit" },
@@ -43,6 +45,12 @@
             "type": "ms.vss-distributed-task.task",
             "targets": [ "ms.vss-distributed-task.tasks" ],
             "properties": { "name": "tasks/AutoDeploy" }
+        },
+{
+            "id": "FabricCatalystMapDeploy",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [ "ms.vss-distributed-task.tasks" ],
+            "properties": { "name": "tasks/MapDeploy" }
         },
         {
             "id": "FabricCatalystPromoteStage",

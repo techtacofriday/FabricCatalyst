@@ -168,7 +168,7 @@ Describe 'Invoke-TokenSubstitution' {
 
     BeforeAll {
         $catalog = [PSCustomObject]@{
-            'Home.Workspace.Id'        = 'ws-111'
+            'HomeWorkspace.Id'        = 'ws-111'
             'Default.Lakehouse.Id'     = 'lh-222'
             'MyWorkspace.Lakehouse.Id' = 'lh-333'
         }
@@ -177,20 +177,20 @@ Describe 'Invoke-TokenSubstitution' {
     Context 'exact token match' {
         It 'replaces a single token with its catalog value' {
             $result = Invoke-TokenSubstitution `
-                -line   '...#{Home.Workspace.Id}#...' `
+                -line   '...#{HomeWorkspace.Id}#...' `
                 -tokens $catalog
             $result | Should -Be '...ws-111...'
         }
         It 'replaces multiple tokens on the same line in one pass' {
             $result = Invoke-TokenSubstitution `
-                -line   '#{Home.Workspace.Id}#::#{Default.Lakehouse.Id}#' `
+                -line   '#{HomeWorkspace.Id}#::#{Default.Lakehouse.Id}#' `
                 -tokens $catalog
             $result | Should -Be 'ws-111::lh-222'
         }
         It 'does not double-substitute a value that looks like another token' {
             # Value 'ws-111' contains no #{...}# pattern, so it should not be re-replaced
             $result = Invoke-TokenSubstitution `
-                -line   '#{Home.Workspace.Id}#' `
+                -line   '#{HomeWorkspace.Id}#' `
                 -tokens $catalog
             $result | Should -Be 'ws-111'
         }
@@ -240,7 +240,7 @@ Describe 'Invoke-TokenSubstitution' {
         }
         It 'handles a line with regex-special characters outside of tokens' {
             $result = Invoke-TokenSubstitution `
-                -line   'price: $100.00 (see #{Home.Workspace.Id}#)' `
+                -line   'price: $100.00 (see #{HomeWorkspace.Id}#)' `
                 -tokens $catalog
             $result | Should -Be 'price: $100.00 (see ws-111)'
         }
@@ -248,47 +248,47 @@ Describe 'Invoke-TokenSubstitution' {
 }
 
 # =============================================================================
-Describe 'Invoke-TokenReplacement' {
+Describe 'Resolve-DeploymentCsvContent' {
 
     BeforeAll {
         $catalog = [PSCustomObject]@{
-            'Home.Workspace.Id'    = 'ws-abc'
+            'HomeWorkspace.Id'    = 'ws-abc'
             'Default.Lakehouse.Id' = 'lh-xyz'
         }
     }
 
     It 'replaces tokens that appear in the provided content lines' {
-        $lines  = @('row,Type,path,#{Home.Workspace.Id}#')
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $lines  = @('row,Type,path,#{HomeWorkspace.Id}#')
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         $result | Should -Match 'ws-abc'
-        $result | Should -Not -Match '#{Home.Workspace.Id}#'
+        $result | Should -Not -Match '#{HomeWorkspace.Id}#'
     }
 
     It 'appends the six default catalog rows (Notebook/SemanticModel/Report mappings)' {
         $lines  = @('header')
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         $result | Should -Match 'Notebook'
         $result | Should -Match 'SemanticModel'
         $result | Should -Match 'Report'
     }
 
     It 'resolves tokens inside the appended default rows' {
-        # The default rows reference #{Home.Workspace.Id}# — verify it is substituted
+        # The default rows reference #{HomeWorkspace.Id}# — verify it is substituted
         $lines  = @()
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         $result | Should -Match 'ws-abc'
-        $result | Should -Not -Match '#{Home.Workspace.Id}#'
+        $result | Should -Not -Match '#{HomeWorkspace.Id}#'
     }
 
     It 'joins all rows with CRLF' {
         $lines  = @('line1', 'line2')
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         $result | Should -Match "`r`n"
     }
 
     It 'returns a single string, not an array' {
         $lines  = @('a', 'b')
-        $result = Invoke-TokenReplacement -content $lines -tokens $catalog
+        $result = Resolve-DeploymentCsvContent -content $lines -tokens $catalog
         ($result -is [string]) | Should -Be $true
     }
 }

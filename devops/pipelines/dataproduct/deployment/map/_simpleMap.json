@@ -1,0 +1,101 @@
+{
+	"domains": [
+		{
+			"name": "FabricCatalyst",
+			"active": 1,
+			"subDomains": [
+				{
+					"name": "Workshop-20250428",
+					"active": 1,
+					"workspaces": [
+						{
+							"name": "Group-01",
+							"active": 1,
+							"capacity": "Trial-20260310T080742Z-oggEGTVcNEWUJF6KfhZxPQ",
+							"items": {
+								"lakehouses": [
+									{
+										"name": "LH_PublicHolidays",
+										"active": 1
+									}
+								],
+								"Notebooks": [
+									{
+										"name": "NB_BRON_PublicHolidays_LoadTable",
+										"active": 1,
+										"directory": "NB_BRON_PublicHolidays_LoadTable.Notebook",
+										"dfnFormat": "ipynb",
+										"dfnParts": [
+											{
+												"fileName": "notebook-content.py",
+												"csvData": [
+													{
+														"jsonPath": "dependencies.environment.workspaceId",
+														"token": "#{Group-01.Id}#"
+													},
+													{
+														"jsonPath": "dependencies.lakehouse.default_lakehouse",
+														"token": "#{Group-01.LH_PublicHolidays.Id}#"
+													},
+													{
+														"jsonPath": "dependencies.lakehouse.default_lakehouse_name",
+														"token": "#{Group-01.LH_PublicHolidays.Name}#"
+													},
+													{
+														"jsonPath": "dependencies.lakehouse.default_lakehouse_workspace_id",
+														"token": "#{Group-01.Id}#"
+													}
+												]
+											},
+											{
+												"fileName": ".platform"
+											}
+										]
+									} 
+								]
+							},
+							"rbacAssignments": [
+								{
+									"type": "Admins",
+									"upnList": "hector.lopez@innorway.onmicrosoft.com"
+								},
+								{
+									"type": "Members",
+									"upnList": ""
+								},
+								{
+									"type": "Contributors",
+									"upnList": ""
+								},
+								{
+									"type": "Viewers",
+									"upnList": ""
+								}
+							]
+						}
+					],
+					"rbacAssignments": [
+						{
+							"type": "Admins",
+							"upnList": "hector.lopez@innorway.onmicrosoft.com"
+						},
+						{
+							"type": "Contributors",
+							"upnList": ""
+						}
+					]
+				}
+			],
+			"rbacAssignments": [
+				{
+					"type": "Admins",
+					"upnList": "hector.lopez@innorway.onmicrosoft.com"
+				},
+				{
+					"type": "Contributors",
+					"upnList": ""
+				}
+			]
+		}
+	]
+}

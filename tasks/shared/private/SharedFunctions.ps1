@@ -441,7 +441,7 @@ function Invoke-DetokenizeConfigFile() {
     )
     $resolvedCatalog = if ($null -ne $catalog) { $catalog } else { $script:fabricItemsPropertiesCatalog }
     $newCsvFilePath = ".\temp\fabricItemsTier$($customFabricItemsTier)\$($deploymentConfigFileName)"
-    $updatedCsvContent = Invoke-TokenReplacement -content $csvContent -tokens $resolvedCatalog # Replace tokens in the CSV content
+    $updatedCsvContent = Resolve-DeploymentCsvContent -content $csvContent -tokens $resolvedCatalog # Replace tokens in the CSV content
     $fncResult = Export-ContentToFile -content $updatedCsvContent -filePath $newCsvFilePath
     if ($fncResult) {
         return $newCsvFilePath
@@ -470,17 +470,17 @@ function Invoke-TokenSubstitution {
     return $line
 }
 
-function Invoke-TokenReplacement {
+function Resolve-DeploymentCsvContent {
     param (
         [string[]]$content,          # Content of the CSV file
         [PSCustomObject]$tokens      # Object containing token keys and values
     )
     # Append default catalog rows so callers never need to hard-code them in their CSV
     $defaultRows = @(
-        "*,Notebook,dependencies.environment.workspaceId,""#{Home.Workspace.Id}#"""
+        "*,Notebook,dependencies.environment.workspaceId,""#{HomeWorkspace.Id}#"""
         "*,Notebook,dependencies.lakehouse.default_lakehouse,""#{Default.Lakehouse.Id}#"""
         "*,Notebook,dependencies.lakehouse.default_lakehouse_name,""#{Default.Lakehouse.Name}#"""
-        "*,Notebook,dependencies.lakehouse.default_lakehouse_workspace_id,""#{Home.Workspace.Id}#"""
+        "*,Notebook,dependencies.lakehouse.default_lakehouse_workspace_id,""#{HomeWorkspace.Id}#"""
         "*,SemanticModel,model.expressions[0].expression,""#{Default.Lakehouse.MConnectionExpresion}#"""
         "*,Report,datasetReference,""#{Default.SemanticModel.DatasetReference}#"""
     )
@@ -1009,4 +1009,37 @@ function Get-DeploymentCsvContent {
         return @("name,type,jsonPath,token")
     }
     return ($csvContent -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+}
+
+function Get-JsonMapContent {
+    param (
+        [parameter(Mandatory = $true)]  [String]         $mapFilePath,
+        [parameter(Mandatory = $true)]  [String]         $branchName,
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+    )
+
+    if (Test-Path $mapFilePath) {
+        return Get-FileContent -filePath $mapFilePath | ConvertFrom-Json
+    }
+
+    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }         else { $script:azdoBaseUrl }
+    $org      = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName }    else { $script:organizationName }
+    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }         else { $script:projectName }
+    $repo     = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }      else { $script:repositoryName }
+    $headers  = if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
+
+    $refSourceBranchName = $branchName
+    if ($branchName -match "^refs/heads/") {
+        $refSourceBranchName = $branchName -replace "^refs/heads/", ""
+    }
+
+    $downloadUrl = "$($azdoBase)/$($org)/$($project)/_apis/git/repositories/$($repo)/items?path=$($mapFilePath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&resolveLfs=true&api-version=7.1-preview.1"
+
+    $targetPath = Get-RemoteFile `
+        -FilePath $mapFilePath.TrimStart("/") `
+        -DownloadUrl $downloadUrl `
+        -localFolder ".\temp" `
+        -Headers $headers
+
+    return Get-FileContent -filePath $targetPath | ConvertFrom-Json
 }
