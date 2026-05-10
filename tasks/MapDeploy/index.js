@@ -24,7 +24,7 @@ function run() {
         for (const name of [
             'jsonMapFileName', 'organizationName', 'projectName',
             'repositoryName', 'sourceBranchName', 'deploymentDirectoryPath',
-            'dataProduct', 'fabricItemsLocation',
+            'deploymentDefinitionsPath', 'fabricItemsLocation',
         ]) {
             env[`FC_${name.toUpperCase()}`] = tl.getInput(name, false) || '';
         }

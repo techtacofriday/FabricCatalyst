@@ -13,7 +13,7 @@
     "version": {
         "Major": 1,
         "Minor": 2,
-        "Patch": 1
+        "Patch": 2
     },
     "instanceNameFormat": "FabricCatalyst Map Deploy $(jsonMapFileName)",
     "groups": [
@@ -82,15 +82,6 @@
             "defaultValue": "_sqlMeetsFabric.json",
             "groupName": "configuration",
             "helpMarkDown": "Name of the JSON file that maps SQL objects to Fabric items."
-        },
-        {
-            "name": "dataProduct",
-            "type": "string",
-            "label": "Data Product",
-            "required": false,
-            "defaultValue": "Default",
-            "groupName": "configuration",
-            "helpMarkDown": "Data product name used to locate the deployment configuration folder."
         },
         {
             "name": "deploymentDirectoryPath",

@@ -7,9 +7,9 @@ $organizationName        = $env:FC_ORGANIZATIONNAME
 $projectName             = $env:FC_PROJECTNAME
 $repositoryName          = $env:FC_REPOSITORYNAME
 $sourceBranchName        = $env:FC_SOURCEBRANCHNAME
-$deploymentDirectoryPath = $env:FC_DEPLOYMENTDIRECTORYPATH
-$dataProduct             = if ($env:FC_DATAPRODUCT)         { $env:FC_DATAPRODUCT }         else { 'Default'        }
-$fabricItemsLocation     = if ($env:FC_FABRICITEMSLOCATION) { $env:FC_FABRICITEMSLOCATION } else { 'LocalDirectory' }
+$deploymentDirectoryPath  = $env:FC_DEPLOYMENTDIRECTORYPATH
+$deploymentDefinitionsPath = $env:FC_DEPLOYMENTDEFINITIONSPATH
+$fabricItemsLocation      = if ($env:FC_FABRICITEMSLOCATION) { $env:FC_FABRICITEMSLOCATION } else { 'LocalDirectory' }
 $updateDefinition        = $env:FC_UPDATEDEFINITION
 $enableDiagnostics       = $env:FC_ENABLEDIAGNOSTICS
 #endregion
@@ -41,16 +41,16 @@ else {
 Write-Host "##[section]Starting FabricCatalyst Map Deployment - map file: $jsonMapFileName"
 
 $params = @{
-    dataProduct              = $dataProduct
-    jsonMapFileName          = $jsonMapFileName
-    updateDefinition         = $updateDefinition
-    organizationName         = $organizationName
-    projectName              = $projectName
-    repositoryName           = $repositoryName
-    sourceBranchName         = $sourceBranchName
-    deploymentDirectoryPath  = $deploymentDirectoryPath
-    fabricItemsLocation      = $fabricItemsLocation
-    enableDiagnostics        = $enableDiagnostics
+    jsonMapFileName            = $jsonMapFileName
+    updateDefinition           = $updateDefinition
+    organizationName           = $organizationName
+    projectName                = $projectName
+    repositoryName             = $repositoryName
+    sourceBranchName           = $sourceBranchName
+    deploymentDirectoryPath    = $deploymentDirectoryPath
+    deploymentDefinitionsPath  = $deploymentDefinitionsPath
+    fabricItemsLocation        = $fabricItemsLocation
+    enableDiagnostics          = $enableDiagnostics
 }
 
 try {
