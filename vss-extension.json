@@ -29,9 +29,7 @@
     "files": [
         { "path": "tasks/AutoDeploy",     "packagePath": "tasks/AutoDeploy" },
         { "path": "tasks/shared/private", "packagePath": "tasks/AutoDeploy/private" },
-        { "path": "tasks/CustomDeploy",   "packagePath": "tasks/CustomDeploy" },
-        { "path": "tasks/shared/private", "packagePath": "tasks/CustomDeploy/private" },
-        { "path": "tasks/MapDeploy",      "packagePath": "tasks/MapDeploy" },
+{ "path": "tasks/MapDeploy",      "packagePath": "tasks/MapDeploy" },
         { "path": "tasks/shared/private", "packagePath": "tasks/MapDeploy/private" },
         { "path": "tasks/PromoteStage",    "packagePath": "tasks/PromoteStage" },
         { "path": "tasks/shared/private", "packagePath": "tasks/PromoteStage/private" },
@@ -48,13 +46,7 @@
             "targets": [ "ms.vss-distributed-task.tasks" ],
             "properties": { "name": "tasks/AutoDeploy" }
         },
-        {
-            "id": "FabricCatalystCustomDeploy",
-            "type": "ms.vss-distributed-task.task",
-            "targets": [ "ms.vss-distributed-task.tasks" ],
-            "properties": { "name": "tasks/CustomDeploy" }
-        },
-        {
+{
             "id": "FabricCatalystMapDeploy",
             "type": "ms.vss-distributed-task.task",
             "targets": [ "ms.vss-distributed-task.tasks" ],
