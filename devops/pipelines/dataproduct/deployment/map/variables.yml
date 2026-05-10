@@ -3,3 +3,4 @@ variables:
   azdoServiceConnection: azdo-serviceconnection-arm-d
   azdoEnvironment: Default-Map
   deploymentDirectoryPath: "devops/pipelines/dataproduct/deployment/map"
+  deploymentDefinitionsPath: "devops/pipelines/dataproduct/deployment/map/definitions"

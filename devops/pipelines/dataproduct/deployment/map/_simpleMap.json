@@ -28,7 +28,6 @@
 										"dfnParts": [
 											{
 												"fileName": "notebook-content.py",
-												"updateJsonValues": 1,
 												"csvData": [
 													{
 														"jsonPath": "dependencies.environment.workspaceId",
