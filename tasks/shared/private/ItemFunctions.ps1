@@ -265,8 +265,12 @@ function New-ItemDefinitionParts {
                 }
             }
             else {
+                Write-Message "Debug" "csvData(InlineSource)>dfnPart.csvData count=$($dfnPart.csvData.Count); catalog keys=$($script:fabricItemsPropertiesCatalog.PSObject.Properties.Name -join ',')"
                 foreach ($detokanizedJsonValue in $dfnPart.csvData) {
-                    $csvData[$detokanizedJsonValue.jsonPath] = $detokanizedJsonValue.token
+                    Write-Message "Debug" "csvData(InlineSource)>jsonPath=$($detokanizedJsonValue.jsonPath); token(raw)=$($detokanizedJsonValue.token)"
+                    $resolved = Invoke-TokenSubstitution -line $detokanizedJsonValue.token -tokens $script:fabricItemsPropertiesCatalog
+                    Write-Message "Debug" "csvData(InlineSource)>token(resolved)=$resolved"
+                    $csvData[$detokanizedJsonValue.jsonPath] = $resolved
                 }
             }
 

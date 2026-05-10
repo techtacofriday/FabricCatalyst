@@ -28,11 +28,11 @@
 										"dfnParts": [
 											{
 												"fileName": "notebook-content.py",
-												"updateJsonValues": 0,
+												"updateJsonValues": 1,
 												"csvData": [
 													{
 														"jsonPath": "dependencies.environment.workspaceId",
-														"token": "#{Group-01.Workspace.Id}#"
+														"token": "#{Group-01.Id}#"
 													},
 													{
 														"jsonPath": "dependencies.lakehouse.default_lakehouse",
@@ -44,7 +44,7 @@
 													},
 													{
 														"jsonPath": "dependencies.lakehouse.default_lakehouse_workspace_id",
-														"token": "#{Group-01.Workspace.Id}#"
+														"token": "#{Group-01.Id}#"
 													}
 												]
 											},
