@@ -314,10 +314,6 @@ try {
                 }
                 $script:newBranchName = "workspace/$($workspaceFQN)"
                 
-                if([Convert]::ToBoolean($script:useEmptyBranch)) {
-                    $script:sourceBranchName = "empty"
-                    $script:itemsGitFolder = "/"
-                }
                 $gitBranchAzdoConfig = New-AzdoConfig `
                     -AzdoBaseUrl         $script:azdoBaseUrl `
                     -OrganizationName    $script:organizationName `
@@ -325,7 +321,11 @@ try {
                     -RepositoryName      $script:repositoryName `
                     -SourceBranchName    $script:sourceBranchName `
                     -DevOpsRequestHeader $script:devOpsRequestHeader
-                New-GitBranch -newBranchName $newBranchName -AzdoConfig $gitBranchAzdoConfig | Out-Null
+                if([Convert]::ToBoolean($script:useEmptyBranch)) {
+                    New-GitBranchFromScratch -newBranchName $newBranchName -itemsGitFolder $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig | Out-Null
+                } else {
+                    New-GitBranchFromExisting -newBranchName $newBranchName -AzdoConfig $gitBranchAzdoConfig | Out-Null
+                }
                 Write-Message "Action" "Connecting workspace $($workspaceFQN) ($($workspaceId)) to branch $($newBranchName)"
                 $gitConfig = New-GitConfig `
                     -GitProviderType       $script:gitProviderType `

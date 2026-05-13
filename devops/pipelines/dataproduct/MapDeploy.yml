@@ -1,0 +1,64 @@
+trigger: none
+
+# resources:
+#   repositories:
+#     - repository: RTD
+#       type: git
+#       name: RTD/RTD
+#       ref: "$(Build.SourceBranch)"
+#       endpoint: CrossOrganizationAccess
+
+pool:
+  vmImage: "windows-latest"
+
+parameters:
+
+- name: jsonMapFileName
+  displayName: "Deployment Map Name"
+  type: string
+  values:
+  - "_simpleMap.json"
+
+- name: updateDefinition
+  displayName: "Update existing Items?"
+  type: boolean
+  default: False
+
+- name: enableDiagnostics
+  displayName: "Enable Diagnostics?"
+  type: boolean
+  default: False
+
+stages:
+  - stage: Deploy 
+    displayName: Stage Deploy 
+    variables:
+      - template: ./deployment/variables.yml
+      - template: ./deployment/map/variables.yml
+
+    jobs:
+    - deployment: Deploy
+      displayName: Deploy  
+      environment: ${{variables.azdoEnvironment}}
+      strategy:
+        runOnce:
+          deploy:
+            steps:
+              - checkout: none
+
+              - task: FabricCatalystMapDeploy@1
+                displayName: 'Execute Powershell script'
+                inputs:
+                  azureSubscription: ${{ variables.azdoServiceConnection }}
+                  dataProduct: "${{parameters.dataProduct}}" 
+                  jsonMapFileName: "${{parameters.jsonMapFileName}}" 
+                  updateDefinition: "${{parameters.updateDefinition}}" 
+                  organizationName: "${{variables.organizationName}}" 
+                  projectName: "${{variables.projectName}}" 
+                  repositoryName: "${{variables.repositoryName}}" 
+                  sourceBranchName: "$(Build.SourceBranch)" 
+                  deploymentDirectoryPath: "${{variables.deploymentDirectoryPath}}"
+                  deploymentDefinitionsPath: "${{variables.deploymentDefinitionsPath}}"
+                  enableDiagnostics: "${{parameters.enableDiagnostics}}"
+
+

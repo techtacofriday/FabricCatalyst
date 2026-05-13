@@ -93,7 +93,7 @@ function New-GitConfig {
 
 function New-AzdoConfig {
     # Constructor for Azure DevOps connection settings consumed by Get-DeploymentCsvContent,
-    # New-GitBranch, Test-DevOpsRepoPath, and Copy-DevOpsRepoBranchRestAPI.
+    # New-GitBranchFromExisting, New-GitBranchFromScratch, Test-DevOpsRepoPath, and Copy-DevOpsRepoBranchRestAPI.
     # Mirrors the New-GitConfig pattern: pass an AzdoConfig in tests to avoid
     # $script: ambient state; omit it in production and the function falls back to
     # $script: variables as before.
