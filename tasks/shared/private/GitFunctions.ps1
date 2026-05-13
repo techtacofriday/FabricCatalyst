@@ -18,7 +18,7 @@ $jsonBody = @"
 return $jsonBody
 }
 
-function New-GitBranch  {
+function New-GitBranchFromExisting {
     param (
         [parameter(Mandatory = $true)]  [String]         $newBranchName,
         [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
@@ -53,6 +53,47 @@ function New-GitBranch  {
     }
     else {
         throw (APIReturnedError -apiCallResponse $gitRepositoriesResponse -intendedAction "list available branches")
+    }
+}
+
+function New-GitBranchFromScratch {
+    param (
+        [parameter(Mandatory = $true)]  [String]         $newBranchName,
+        [parameter(Mandatory = $false)] [String]         $itemsGitFolder = "/fabric",
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+    )
+    $azdoBase     = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }      else { $script:azdoBaseUrl }
+    $org          = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName } else { $script:organizationName }
+    $project      = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }      else { $script:projectName }
+    $repo         = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }   else { $script:repositoryName }
+    $gitkeepPath  = $itemsGitFolder.TrimEnd('/') + '/.gitkeep'
+
+    $jsonBody = @"
+{
+  "refUpdates": [ { "name": "refs/heads/$newBranchName", "oldObjectId": "0000000000000000000000000000000000000000" } ],
+  "commits": [
+    {
+      "comment": "Initialize empty branch",
+      "changes": [
+        {
+          "changeType": "add",
+          "item": { "path": "$gitkeepPath" },
+          "newContent": { "content": "", "contentType": "rawtext" }
+        }
+      ]
+    }
+  ]
+}
+"@
+
+    $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/pushes?api-version=7.1"
+    $response = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $jsonBody
+    if ($response.responseObject.StatusCode -eq 201) {
+        Write-Message "Info" "Branch $($newBranchName) created as an independent root."
+        return $newBranchName
+    }
+    else {
+        throw (APIReturnedError -apiCallResponse $response -intendedAction "creating orphan branch")
     }
 }
 

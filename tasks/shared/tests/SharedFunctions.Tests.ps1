@@ -789,7 +789,7 @@ Describe 'Get-DeploymentCsvContent' {
 }
 
 # =============================================================================
-Describe 'New-GitBranch' {
+Describe 'New-GitBranchFromExisting' {
 
     BeforeAll {
         . "$PSScriptRoot\..\private\GitFunctions.ps1"
@@ -821,14 +821,14 @@ Describe 'New-GitBranch' {
 
     Context 'URL construction' {
         It 'lists refs using org/project/repo from AzdoConfig' {
-            New-GitBranch -newBranchName 'workspace/ws_test' -AzdoConfig $testConfig | Out-Null
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_test' -AzdoConfig $testConfig | Out-Null
             Should -Invoke Invoke-ApiEndpoint -ParameterFilter {
                 $endPoint -like '/testOrg/testProject/_apis/git/repositories/testRepo/refs*'
             }
         }
 
         It 'filters by SourceBranchName from AzdoConfig' {
-            New-GitBranch -newBranchName 'workspace/ws_test' -AzdoConfig $testConfig | Out-Null
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_test' -AzdoConfig $testConfig | Out-Null
             Should -Invoke Invoke-ApiEndpoint -ParameterFilter {
                 $endPoint -like '*filter=heads/main*'
             }
@@ -843,7 +843,7 @@ Describe 'New-GitBranch' {
                     isException    = $false
                 }
             }
-            { New-GitBranch -newBranchName 'new-branch' -AzdoConfig $cfg } | Should -Throw -ExpectedMessage "*main*wasn't found*"
+            { New-GitBranchFromExisting -newBranchName 'new-branch' -AzdoConfig $cfg } | Should -Throw -ExpectedMessage "*main*wasn't found*"
         }
     }
 }
