@@ -1,0 +1,99 @@
+{
+  "domains": [
+    {
+      "name": "SkattDemo",
+      "active": 1,
+      "subDomains": [
+        {
+          "name": "Operational",
+          "active": 1,
+          "rules": [
+            {
+              "name": "production-workspaces",
+              "active": 1,
+              "capacity": "Trial-FTL64-WUS-20260218",
+              "match": {
+                "nameGlob": "*prod*"
+              },
+              "enforce": {
+                "rbac": {
+                  "Admins": [ "grp-fabric-platform-admins" ],
+                  "Members": [ "grp-finance-bi-devs" ],
+                  "Viewers": [ "grp-finance-bi-consumers" ]
+                }
+              }
+            },
+            {
+              "name": "development-workspaces",
+              "active": 1,
+              "capacity": "Trial-FTL64-WUS-20260218",
+              "match": {
+                "nameGlob": "*dev*",
+                "excludeGlob": [ "SqlMeetsFabric-dev", "MedallionArchTemplate-dev", "ws_*" ]
+              },
+              "enforce": {
+                "rbac": {
+                  "Admins": [ "grp-fabric-platform-admins" ],
+                  "Members": [ "grp-finance-bi-devs" ],
+                  "Viewers": [ "grp-finance-bi-consumers" ]
+                }
+              }
+            }
+          ],
+          "rbacAssignments": [
+            {
+              "type": "Admins",
+              "upnList": "admin.hlopez@acnazure034hotmail.onmicrosoft.com"
+            },
+            {
+              "type": "Contributors",
+              "upnList": ""
+            }
+          ]
+        },
+        {
+          "name": "Quarantine",
+          "active": 1,
+          "rules": [
+            {
+              "name": "non-compliant",
+              "active": 1,
+              "capacity": "Trial-FTL64-WUS-20260218",
+              "match": {
+                "nameGlob": "*",
+                "excludeGlob": [ "SqlMeetsFabric-dev", "MedallionArchTemplate-dev", "ws_*" ]
+              },
+              "enforce": {
+                "rbacAssignments": {
+                  "Admins": [ "grp-fabric-platform-admins" ],
+                  "Members": [ "grp-finance-bi-devs" ],
+                  "Viewers": [ "grp-finance-bi-consumers" ]
+                }
+              }
+            }
+          ],
+          "rbacAssignments": [
+            {
+              "type": "Admins",
+              "upnList": "admin.hlopez@acnazure034hotmail.onmicrosoft.com"
+            },
+            {
+              "type": "Contributors",
+              "upnList": ""
+            }
+          ]
+        }
+      ],
+      "rbacAssignments": [
+        {
+          "type": "Admins",
+          "upnList": "admin.hlopez@acnazure034hotmail.onmicrosoft.com"
+        },
+        {
+          "type": "Contributors",
+          "upnList": ""
+        }
+      ]
+    }
+  ]
+}
