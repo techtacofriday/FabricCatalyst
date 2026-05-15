@@ -1,0 +1,5 @@
+variables:
+  #Azure DevOps (azdo) variables 
+  azdoServiceConnection: azdo-serviceconnection-arm-d
+  azdoEnvironment: Default-State
+  deploymentDirectoryPath: "devops/pipelines/dataproduct/deployment/state"

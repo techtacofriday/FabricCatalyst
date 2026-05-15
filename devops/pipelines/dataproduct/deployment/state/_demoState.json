@@ -1,4 +1,8 @@
 {
+  "exemptions": [
+    { "nameGlob": "SqlMeetsFabric-*" },
+    { "nameGlob": "MedallionArchTemplate-*" }
+  ],
   "domains": [
     {
       "name": "SkattDemo",
@@ -28,8 +32,22 @@
               "active": 1,
               "capacity": "Trial-FTL64-WUS-20260218",
               "match": {
-                "nameGlob": "*dev*",
-                "excludeGlob": [ "SqlMeetsFabric-dev", "MedallionArchTemplate-dev", "ws_*" ]
+                "nameGlob": "*dev*"
+              },
+              "enforce": {
+                "rbac": {
+                  "Admins": [ "grp-fabric-platform-admins" ],
+                  "Members": [ "grp-finance-bi-devs" ],
+                  "Viewers": [ "grp-finance-bi-consumers" ]
+                }
+              }
+            },
+            {
+              "name": "platform-workspaces",
+              "active": 1,
+              "capacity": "Trial-FTL64-WUS-20260218",
+              "match": {
+                "nameGlob": "ws_*"
               },
               "enforce": {
                 "rbac": {
@@ -60,11 +78,10 @@
               "active": 1,
               "capacity": "Trial-FTL64-WUS-20260218",
               "match": {
-                "nameGlob": "*",
-                "excludeGlob": [ "SqlMeetsFabric-dev", "MedallionArchTemplate-dev", "ws_*" ]
+                "nameGlob": "*"
               },
               "enforce": {
-                "rbacAssignments": {
+                "rbac": {
                   "Admins": [ "grp-fabric-platform-admins" ],
                   "Members": [ "grp-finance-bi-devs" ],
                   "Viewers": [ "grp-finance-bi-consumers" ]
