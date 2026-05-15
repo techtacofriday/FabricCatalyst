@@ -231,7 +231,7 @@ try {
 
     $processedCount = $script:fabricWorkspacesCatalog.Count
     $unmatchedCount = $allWorkspaces.Count - $processedCount
-    Write-Message "Info" "Workspace State Summary (whatIf=$whatIf, remove=$remove) — $($allWorkspaces.Count) total, $processedCount matched, $unmatchedCount unmatched by any rule."
+    Write-Message "Info" "Workspace State Summary (whatIf=$whatIf, remove=$remove) - $($allWorkspaces.Count) total, $processedCount matched, $unmatchedCount unmatched by any rule."
 
     if ($processedCount -gt 0) {
         $summary = $script:fabricWorkspacesCatalog.Values
