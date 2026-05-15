@@ -218,6 +218,7 @@ function New-ItemDefinitionParts {
         [parameter(Mandatory = $false)] [String]         $dfnDirectory = $null,
         [parameter(Mandatory = $true)]  [PSCustomObject] $dfnParts,
         [parameter(Mandatory = $false)] [PSCustomObject] $catalog = $null,
+        [parameter(Mandatory = $false)] [switch]         $NewItem,
         [parameter(Mandatory = $false)]
         [ValidateSet("True", "False")] [String] $enableDiagnostics = "False"
     )
@@ -246,6 +247,7 @@ function New-ItemDefinitionParts {
                         -dfnDirectory $dfnDirectory `
                         -dfnParts $folderContents `
                         -catalog $resolvedCatalog `
+                        -NewItem:$NewItem `
                         -enableDiagnostics $enableDiagnostics
                 }
                 continue
@@ -255,6 +257,12 @@ function New-ItemDefinitionParts {
                 throw "Cannot create '$($itemName)': required definition file '$($dfnFilePath)' was not found."
             }
             $partFileContent = Get-FileContent -filePath $dfnFilePath
+
+            if ($NewItem -and (Split-Path -Leaf $dfnPart.fileName) -eq '.platform') {
+                $platformJson = $partFileContent | ConvertFrom-Json
+                $platformJson.config.logicalId = [System.Guid]::NewGuid().ToString()
+                $partFileContent = $platformJson | ConvertTo-Json -Depth 10
+            }
 
             # Load CSV data if applicable
             $csvData = @{}

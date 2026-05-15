@@ -175,6 +175,7 @@ function New-MapItem {
                         -itemType "Notebook" `
                         -dfnDirectory $dfnDirectory `
                         -dfnParts $detokenizedItem.dfnParts `
+                        -NewItem:(-not [Convert]::ToBoolean($updateDefinition)) `
                         -enableDiagnostics $enableDiagnostics
 
                     if ($null -ne $notebookDefinitionParts) {
@@ -220,6 +221,7 @@ function New-MapItem {
                     -itemType "SemanticModel" `
                     -dfnDirectory $dfnDirectory `
                     -dfnParts $detokenizedItem.dfnParts `
+                    -NewItem:(-not [Convert]::ToBoolean($updateDefinition)) `
                     -enableDiagnostics $enableDiagnostics
 
                 if ($null -ne $semanticModelDefinitionParts) {
@@ -256,6 +258,7 @@ function New-MapItem {
                         -itemType "DataPipeline" `
                         -dfnDirectory $dfnDirectory `
                         -dfnParts $detokenizedItem.dfnParts `
+                        -NewItem:(-not [Convert]::ToBoolean($updateDefinition)) `
                         -enableDiagnostics $enableDiagnostics
 
                     if ($null -ne $dataPipelineDefinitionParts) {
@@ -301,6 +304,7 @@ function New-MapItem {
                     -itemType "Report" `
                     -dfnDirectory $dfnDirectory `
                     -dfnParts $detokenizedItem.dfnParts `
+                    -NewItem:(-not [Convert]::ToBoolean($updateDefinition)) `
                     -enableDiagnostics $enableDiagnostics
 
                 if ($null -ne $reportDefinitionParts) {
