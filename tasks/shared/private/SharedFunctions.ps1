@@ -103,7 +103,11 @@ function New-AzdoConfig {
         [parameter(Mandatory = $false)] [string]    $ProjectName         = $null,
         [parameter(Mandatory = $false)] [string]    $RepositoryName      = $null,
         [parameter(Mandatory = $false)] [string]    $SourceBranchName    = $null,
-        [parameter(Mandatory = $false)] [hashtable] $DevOpsRequestHeader = $null
+        [parameter(Mandatory = $false)] [hashtable] $DevOpsRequestHeader = $null,
+        [parameter(Mandatory = $false)]
+        [ValidateSet("AzureDevOps","GitHub")]
+        [string] $GitProviderType = $null,
+        [parameter(Mandatory = $false)] [string]    $Pat                 = $null
     )
     return [PSCustomObject]@{
         AzdoBaseUrl         = $AzdoBaseUrl
@@ -112,6 +116,8 @@ function New-AzdoConfig {
         RepositoryName      = $RepositoryName
         SourceBranchName    = $SourceBranchName
         DevOpsRequestHeader = $DevOpsRequestHeader
+        GitProviderType     = $GitProviderType
+        Pat                 = $Pat
     }
 }
 
@@ -150,8 +156,9 @@ function Invoke-FabricApiRequest {
 function Invoke-ApiEndpoint {
     param (
         [parameter(Mandatory = $false)]
-        [ValidateSet("Fabric", "DevOps", "Graph")] [String] $useRequestHeader = "Fabric",
+        [ValidateSet("Fabric", "DevOps", "Graph", "GitHub")] [String] $useRequestHeader = "Fabric",
         [parameter(Mandatory = $false)] [String] $contentType = "application/json",
+        [parameter(Mandatory = $false)] [hashtable] $CustomHeader = $null,
         [parameter(Mandatory = $false)] [String] $baseUrl,
         [parameter(Mandatory = $true)] [String] $endPoint,
         [parameter(Mandatory = $false)] [String] $method = "GET",
@@ -166,11 +173,16 @@ function Invoke-ApiEndpoint {
         [parameter(Mandatory = $false)] [PSCustomObject] $Context
     )
 
-    switch ($useRequestHeader) {
-        "Fabric" { $requestHeader = if ($null -ne $Context) { $Context.FabricRequestHeader } else { $script:fabricRequestHeader } }
-        "DevOps" { $requestHeader = if ($null -ne $Context) { $Context.DevOpsRequestHeader } else { $script:devopsRequestHeader } }
-        "Graph"  { $requestHeader = if ($null -ne $Context) { $Context.GraphRequestHeader }  else { $script:graphRequestHeader } }
-        default  { throw "Request header type $($useRequestHeader) is not supported" }
+    if ($null -ne $CustomHeader) {
+        $requestHeader = $CustomHeader
+    } else {
+        switch ($useRequestHeader) {
+            "Fabric" { $requestHeader = if ($null -ne $Context) { $Context.FabricRequestHeader } else { $script:fabricRequestHeader } }
+            "DevOps" { $requestHeader = if ($null -ne $Context) { $Context.DevOpsRequestHeader } else { $script:devopsRequestHeader } }
+            "Graph"  { $requestHeader = if ($null -ne $Context) { $Context.GraphRequestHeader }  else { $script:graphRequestHeader } }
+            "GitHub" { $requestHeader = $script:gitHubRequestHeader }
+            default  { throw "Request header type $($useRequestHeader) is not supported" }
+        }
     }
 
     $resolvedBaseUrl = if ($null -ne $Context) { $Context.FabricBaseUrl } else { $script:fabricBaseUrl }
@@ -182,7 +194,7 @@ function Invoke-ApiEndpoint {
         $resolvedBaseUrl + "/$FabricApiVersion" + $endPoint
     }
 
-    Write-Message "Debug" "Header   : $($useRequestHeader)"
+    Write-Message "Debug" "Header   : $(if ($null -ne $CustomHeader) { 'Custom' } else { $useRequestHeader })"
     Write-Message "Debug" "URI      : $($URI)"
     Write-Message "Debug" "Method   : $($method)"
     Write-Message "Develop" "Content  : $($contentType)"
@@ -281,18 +293,22 @@ function APIReturnedError {
 
 function New-RequestHeader {
     param (
+        [ValidateSet("Bearer","Basic")]
         [parameter(Mandatory = $false)] [String] $authType = "Bearer",
-        [parameter(Mandatory = $false)] [String] $accessToken
+        [parameter(Mandatory = $true)] [String] $accessToken
     )
     Write-Message "Debug" "Auth Type     : $($authType)"
     Write-Message "Debug" "Access Token  : $($accessToken.Substring(0, 4)+'********')"
-    if ($authType -eq "Bearer" -and ![string]::IsNullOrWhiteSpace($accessToken)) {
+    if ($authType -eq "Bearer") {
         return @{
-            Authorization = "$($authType) $($accessToken)"
+            Authorization = "Bearer $($accessToken)"
         }
     }
     else {
-        throw ("Unsupported Authentication Type provided: $($authType)")
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($accessToken)"))
+        return @{
+            Authorization = "Basic $($encoded)"
+        }
     }
 }
 

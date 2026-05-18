@@ -14,8 +14,9 @@ param
     [parameter(Mandatory = $false)] [String] $jsonMapFileName,
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $updateDefinition = "False",
-    [ValidateSet("AzureDevOps")]
+    [ValidateSet("AzureDevOps","GitHub")]
     [parameter(Mandatory = $false)] [String] $gitProviderType = "AzureDevOps",
+    [parameter(Mandatory = $false)] [String] $externalGitPat,
     [parameter(Mandatory = $false)] [String] $organizationName,
     [parameter(Mandatory = $false)] [String] $projectName,
     [parameter(Mandatory = $false)] [String] $repositoryName,
@@ -406,7 +407,7 @@ try {
     $maxLength = ($scriptParams | Measure-Object -Maximum -Property Length).Maximum
     foreach ($param in $scriptParams) {
         $value = Get-Variable -Name $param -ValueOnly -ErrorAction SilentlyContinue
-        $displayValue = if ([string]::IsNullOrEmpty($value)) { "empty" } else { $value }
+        $displayValue = if ([string]::IsNullOrEmpty($value)) { "empty" } elseif ($param -eq 'externalGitPat') { '****' } else { $value }
         Write-Message "Info" ("{0,-$maxLength} : {1}" -f $param, $displayValue)
     }
     Initialize-AuthContext -TenantId $tenantId -ServicePrincipalId $servicePrincipalId -ServicePrincipalSecret $servicePrincipalSecret | Out-Null
@@ -418,7 +419,9 @@ try {
         -ProjectName         $script:projectName `
         -RepositoryName      $script:repositoryName `
         -SourceBranchName    $script:sourceBranchName `
-        -DevOpsRequestHeader $script:devOpsRequestHeader
+        -DevOpsRequestHeader $script:devOpsRequestHeader `
+        -GitProviderType     $gitProviderType `
+        -Pat                 $externalGitPat
 
     Write-Message "Info" "Downloading map JSON file '$jsonMapFileName' from branch '$sourceBranchName'."
     $repoJsonMapFilePath = "$deploymentDirectoryPath/$jsonMapFileName"

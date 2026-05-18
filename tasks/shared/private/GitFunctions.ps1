@@ -119,7 +119,11 @@ function Test-DevOpsRepoPath {
     param (
         [parameter(Mandatory = $true)]  [String]         $gitPath,
         [parameter(Mandatory = $false)] [String]         $branchName = $null,
-        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null,
+        [parameter(Mandatory = $false)]
+        [ValidateSet("AzureDevOps","GitHub")]
+        [String] $gitProviderType = "AzureDevOps",
+        [parameter(Mandatory = $false)] [String]         $Pat = $null
     )
 
     if (Test-Path $gitPath) { return $true }
@@ -132,13 +136,37 @@ function Test-DevOpsRepoPath {
                       elseif ($null -ne $AzdoConfig)                       { $AzdoConfig.SourceBranchName }
                       else                                                  { $script:sourceBranchName }
 
+    $resolvedPat      = if (-not [string]::IsNullOrWhiteSpace($Pat))                                                         { $Pat }
+                        elseif ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))              { $AzdoConfig.Pat }
+                        else                                                                                                   { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType))      { $AzdoConfig.GitProviderType }
+                        else                                                                                                   { $gitProviderType }
+    if ($PSBoundParameters.ContainsKey('gitProviderType')) { $resolvedProvider = $gitProviderType }
+
     $refSourceBranchName = $resolvedBranch
     if ($resolvedBranch -match "^refs/heads/") {
         $refSourceBranchName = $resolvedBranch -replace "^refs/heads/", ""
     }
 
-    $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/items?scopePath=$($gitPath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&api-version=7.1-preview.1"
-    $response = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+        $script:gitHubRequestHeader = New-RequestHeader -authType "Bearer" -accessToken $resolvedPat
+        $script:gitHubRequestHeader['Accept'] = 'application/vnd.github+json'
+        $script:gitHubRequestHeader['X-GitHub-Api-Version'] = '2022-11-28'
+        $normalizedPath = $gitPath.TrimStart("/")
+        $endPoint = "/repos/$($org)/$($repo)/contents/$($normalizedPath)?ref=$($refSourceBranchName)"
+        $response = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl "https://api.github.com" -endPoint $endPoint
+    }
+    elseif (-not [string]::IsNullOrWhiteSpace($resolvedPat)) {
+        $patHeader = New-RequestHeader -authType "Basic" -accessToken $resolvedPat
+        $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/items?scopePath=$($gitPath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&api-version=7.1-preview.1"
+        $response = Invoke-ApiEndpoint -CustomHeader $patHeader -baseUrl $azdoBase -endPoint $endPoint
+    }
+    else {
+        $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/items?scopePath=$($gitPath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&api-version=7.1-preview.1"
+        $response = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint
+    }
+
     if ($response.responseObject.StatusCode -eq 200) {
         return $true
     }
@@ -155,7 +183,11 @@ function Copy-DevOpsRepoBranchRestAPI {
         [parameter(Mandatory = $true)]  [String]         $gitPath,
         [parameter(Mandatory = $true)]  [String]         $localFolder,
         [parameter(Mandatory = $false)] [Bool]           $cleanFirst = $true,
-        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null,
+        [parameter(Mandatory = $false)]
+        [ValidateSet("AzureDevOps","GitHub")]
+        [String] $gitProviderType = "AzureDevOps",
+        [parameter(Mandatory = $false)] [String]         $Pat = $null
     )
 
     $azdoBase     = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }         else { $script:azdoBaseUrl }
@@ -163,31 +195,81 @@ function Copy-DevOpsRepoBranchRestAPI {
     $project      = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }         else { $script:projectName }
     $repo         = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }      else { $script:repositoryName }
     $sourceBranch = if ($null -ne $AzdoConfig) { $AzdoConfig.SourceBranchName }    else { $script:sourceBranchName }
-    $headers      = if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $null }
+    $sameTenatHeaders = if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $null }
+
+    $resolvedPat      = if (-not [string]::IsNullOrWhiteSpace($Pat))                                                         { $Pat }
+                        elseif ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))              { $AzdoConfig.Pat }
+                        else                                                                                                   { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType))      { $AzdoConfig.GitProviderType }
+                        else                                                                                                   { $gitProviderType }
+    if ($PSBoundParameters.ContainsKey('gitProviderType')) { $resolvedProvider = $gitProviderType }
 
     $refSourceBranchName = $sourceBranch
     if ($sourceBranch -match "^refs/heads/") {
         $refSourceBranchName = $sourceBranch -replace "^refs/heads/", ""
     }
 
-    $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/items?scopePath=$($gitPath)&recursionLevel=Full&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&api-version=7.1-preview.1"
-    $gitRepositoriesResponse = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint
-    if ($gitRepositoriesResponse.responseObject.StatusCode -eq 200) {
-        if ((Test-Path $localFolder) -and $cleanFirst) {
-            Remove-Item -Recurse -Force -Path $localFolder
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+
+        $script:gitHubRequestHeader = New-RequestHeader -authType "Bearer" -accessToken $resolvedPat
+        $script:gitHubRequestHeader['Accept'] = 'application/vnd.github+json'
+        $script:gitHubRequestHeader['X-GitHub-Api-Version'] = '2022-11-28'
+        $ghDownloadHeaders = @{
+            Authorization          = "Bearer $resolvedPat"
+            Accept                 = 'application/vnd.github.raw'
+            'X-GitHub-Api-Version' = '2022-11-28'
         }
-        New-Item -ItemType Directory -Path $localFolder | Out-Null
-        $branchItems = ($gitRepositoriesResponse.responseObject.Content | ConvertFrom-Json).value
-        foreach ($item in $branchItems) {
-            if ($item.isFolder -ne $true) {
-                $downloadUrl = "$($azdoBase)/$($org)/$($project)/_apis/git/repositories/$($repo)/items?path=$($item.path)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&resolveLfs=true&api-version=7.1-preview.1"
-                Write-Message "Develop" "Downloading $($downloadUrl)"
-                Get-RemoteFile -FilePath $item.path.TrimStart("/") -DownloadUrl $downloadUrl -localFolder $localFolder -Headers $headers
+        $ghBase = "https://api.github.com"
+
+        $endPoint = "/repos/$($org)/$($repo)/git/trees/$($refSourceBranchName)?recursive=1"
+        $treeResponse = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint $endPoint
+        if ($treeResponse.responseObject.StatusCode -eq 200) {
+            if ((Test-Path $localFolder) -and $cleanFirst) { Remove-Item -Recurse -Force -Path $localFolder }
+            New-Item -ItemType Directory -Path $localFolder | Out-Null
+            $treeItems = ($treeResponse.responseObject.Content | ConvertFrom-Json).tree
+            $normalizedPath = $gitPath.TrimStart("/").TrimEnd("/")
+            $pathPrefix = if ([string]::IsNullOrWhiteSpace($normalizedPath)) { "" } else { "$normalizedPath/" }
+            $filteredItems = $treeItems | Where-Object {
+                $_.type -eq "blob" -and ([string]::IsNullOrWhiteSpace($pathPrefix) -or $_.path.StartsWith($pathPrefix))
             }
+            foreach ($item in $filteredItems) {
+                $downloadUrl = "$($ghBase)/repos/$($org)/$($repo)/contents/$($item.path)?ref=$($refSourceBranchName)"
+                Write-Message "Develop" "Downloading $($downloadUrl)"
+                Get-RemoteFile -FilePath $item.path -DownloadUrl $downloadUrl -localFolder $localFolder -Headers $ghDownloadHeaders
+            }
+            return $true
         }
-        return $true
+        else {
+            throw (APIReturnedError -apiCallResponse $treeResponse -intendedAction "fetching items in the GitHub branch")
+        }
     }
     else {
-        throw (APIReturnedError -apiCallResponse $gitRepositoriesResponse -intendedAction "fetching items in the branch")
+        $invokeHeader  = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) { New-RequestHeader -authType "Basic" -accessToken $resolvedPat } else { $null }
+        $downloadHeaders = if ($null -ne $invokeHeader) { $invokeHeader } else { $sameTenatHeaders }
+
+        $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/items?scopePath=$($gitPath)&recursionLevel=Full&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&api-version=7.1-preview.1"
+        $listResponse = if ($null -ne $invokeHeader) {
+            Invoke-ApiEndpoint -CustomHeader $invokeHeader -baseUrl $azdoBase -endPoint $endPoint
+        } else {
+            Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint
+        }
+
+        if ($listResponse.responseObject.StatusCode -eq 200) {
+            if ((Test-Path $localFolder) -and $cleanFirst) { Remove-Item -Recurse -Force -Path $localFolder }
+            New-Item -ItemType Directory -Path $localFolder | Out-Null
+            $branchItems = ($listResponse.responseObject.Content | ConvertFrom-Json).value
+            foreach ($item in $branchItems) {
+                if ($item.isFolder -ne $true) {
+                    $downloadUrl = "$($azdoBase)/$($org)/$($project)/_apis/git/repositories/$($repo)/items?path=$($item.path)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&resolveLfs=true&api-version=7.1-preview.1"
+                    Write-Message "Develop" "Downloading $($downloadUrl)"
+                    Get-RemoteFile -FilePath $item.path.TrimStart("/") -DownloadUrl $downloadUrl -localFolder $localFolder -Headers $downloadHeaders
+                }
+            }
+            return $true
+        }
+        else {
+            throw (APIReturnedError -apiCallResponse $listResponse -intendedAction "fetching items in the branch")
+        }
     }
 }
