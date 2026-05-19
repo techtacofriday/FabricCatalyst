@@ -35,7 +35,8 @@ stages:
     variables:
       - template: ./deployment/variables.yml
       - template: ./deployment/map/variables.yml
-
+      - name: KVPASSWD
+        value: ''
     jobs:
     - deployment: Deploy
       displayName: Deploy  
