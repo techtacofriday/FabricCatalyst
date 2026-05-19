@@ -103,7 +103,11 @@ function New-AzdoConfig {
         [parameter(Mandatory = $false)] [string]    $ProjectName         = $null,
         [parameter(Mandatory = $false)] [string]    $RepositoryName      = $null,
         [parameter(Mandatory = $false)] [string]    $SourceBranchName    = $null,
-        [parameter(Mandatory = $false)] [hashtable] $DevOpsRequestHeader = $null
+        [parameter(Mandatory = $false)] [hashtable] $DevOpsRequestHeader = $null,
+        [parameter(Mandatory = $false)]
+        [ValidateSet("AzureDevOps","GitHub")]
+        [string] $GitProviderType = $null,
+        [parameter(Mandatory = $false)] [string]    $Pat                 = $null
     )
     return [PSCustomObject]@{
         AzdoBaseUrl         = $AzdoBaseUrl
@@ -112,6 +116,8 @@ function New-AzdoConfig {
         RepositoryName      = $RepositoryName
         SourceBranchName    = $SourceBranchName
         DevOpsRequestHeader = $DevOpsRequestHeader
+        GitProviderType     = $GitProviderType
+        Pat                 = $Pat
     }
 }
 
@@ -150,8 +156,9 @@ function Invoke-FabricApiRequest {
 function Invoke-ApiEndpoint {
     param (
         [parameter(Mandatory = $false)]
-        [ValidateSet("Fabric", "DevOps", "Graph")] [String] $useRequestHeader = "Fabric",
+        [ValidateSet("Fabric", "DevOps", "Graph", "GitHub")] [String] $useRequestHeader = "Fabric",
         [parameter(Mandatory = $false)] [String] $contentType = "application/json",
+        [parameter(Mandatory = $false)] [hashtable] $CustomHeader = $null,
         [parameter(Mandatory = $false)] [String] $baseUrl,
         [parameter(Mandatory = $true)] [String] $endPoint,
         [parameter(Mandatory = $false)] [String] $method = "GET",
@@ -166,11 +173,16 @@ function Invoke-ApiEndpoint {
         [parameter(Mandatory = $false)] [PSCustomObject] $Context
     )
 
-    switch ($useRequestHeader) {
-        "Fabric" { $requestHeader = if ($null -ne $Context) { $Context.FabricRequestHeader } else { $script:fabricRequestHeader } }
-        "DevOps" { $requestHeader = if ($null -ne $Context) { $Context.DevOpsRequestHeader } else { $script:devopsRequestHeader } }
-        "Graph"  { $requestHeader = if ($null -ne $Context) { $Context.GraphRequestHeader }  else { $script:graphRequestHeader } }
-        default  { throw "Request header type $($useRequestHeader) is not supported" }
+    if ($null -ne $CustomHeader) {
+        $requestHeader = $CustomHeader
+    } else {
+        switch ($useRequestHeader) {
+            "Fabric" { $requestHeader = if ($null -ne $Context) { $Context.FabricRequestHeader } else { $script:fabricRequestHeader } }
+            "DevOps" { $requestHeader = if ($null -ne $Context) { $Context.DevOpsRequestHeader } else { $script:devopsRequestHeader } }
+            "Graph"  { $requestHeader = if ($null -ne $Context) { $Context.GraphRequestHeader }  else { $script:graphRequestHeader } }
+            "GitHub" { $requestHeader = $script:gitHubRequestHeader }
+            default  { throw "Request header type $($useRequestHeader) is not supported" }
+        }
     }
 
     $resolvedBaseUrl = if ($null -ne $Context) { $Context.FabricBaseUrl } else { $script:fabricBaseUrl }
@@ -182,7 +194,7 @@ function Invoke-ApiEndpoint {
         $resolvedBaseUrl + "/$FabricApiVersion" + $endPoint
     }
 
-    Write-Message "Debug" "Header   : $($useRequestHeader)"
+    Write-Message "Debug" "Header   : $(if ($null -ne $CustomHeader) { 'Custom' } else { $useRequestHeader })"
     Write-Message "Debug" "URI      : $($URI)"
     Write-Message "Debug" "Method   : $($method)"
     Write-Message "Develop" "Content  : $($contentType)"
@@ -281,18 +293,22 @@ function APIReturnedError {
 
 function New-RequestHeader {
     param (
+        [ValidateSet("Bearer","Basic")]
         [parameter(Mandatory = $false)] [String] $authType = "Bearer",
-        [parameter(Mandatory = $false)] [String] $accessToken
+        [parameter(Mandatory = $true)] [String] $accessToken
     )
     Write-Message "Debug" "Auth Type     : $($authType)"
     Write-Message "Debug" "Access Token  : $($accessToken.Substring(0, 4)+'********')"
-    if ($authType -eq "Bearer" -and ![string]::IsNullOrWhiteSpace($accessToken)) {
+    if ($authType -eq "Bearer") {
         return @{
-            Authorization = "$($authType) $($accessToken)"
+            Authorization = "Bearer $($accessToken)"
         }
     }
     else {
-        throw ("Unsupported Authentication Type provided: $($authType)")
+        $encoded = [Convert]::ToBase64String([Text.Encoding]::ASCII.GetBytes(":$($accessToken)"))
+        return @{
+            Authorization = "Basic $($encoded)"
+        }
     }
 }
 
@@ -979,21 +995,43 @@ function Get-DeploymentCsvContent {
         [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
     )
 
-    if (Test-Path $configFilePath) {
+    if ($env:FC_LOCAL_FILES -and (Test-Path $configFilePath)) {
         $csvContent = Get-FileContent -filePath $configFilePath
         if ([string]::IsNullOrWhiteSpace($csvContent)) { return @("name,type,jsonPath,token") }
         return ($csvContent -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     }
 
-    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }         else { $script:azdoBaseUrl }
     $org      = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName }    else { $script:organizationName }
-    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }         else { $script:projectName }
     $repo     = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }      else { $script:repositoryName }
-    $headers  = if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
+    $resolvedPat      = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))             { $AzdoConfig.Pat }             else { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType)) { $AzdoConfig.GitProviderType } else { "AzureDevOps" }
 
     $refSourceBranchName = $branchName
     if ($branchName -match "^refs/heads/") {
         $refSourceBranchName = $branchName -replace "^refs/heads/", ""
+    }
+
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+        $ghDownloadHeaders = @{
+            Authorization          = "Bearer $resolvedPat"
+            Accept                 = 'application/vnd.github.raw'
+            'X-GitHub-Api-Version' = '2022-11-28'
+        }
+        $normalizedPath = $configFilePath.TrimStart("/")
+        $downloadUrl = "https://api.github.com/repos/$($org)/$($repo)/contents/$($normalizedPath)?ref=$($refSourceBranchName)"
+        $targetPath = Get-RemoteFile -FilePath $normalizedPath -DownloadUrl $downloadUrl -localFolder ".\temp" -Headers $ghDownloadHeaders
+        $csvContent = Get-FileContent -filePath $targetPath
+        if ([string]::IsNullOrWhiteSpace($csvContent)) { return @("name,type,jsonPath,token") }
+        return ($csvContent -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    }
+
+    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl } else { $script:azdoBaseUrl }
+    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName } else { $script:projectName }
+    $headers  = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) {
+        New-RequestHeader -authType "Basic" -accessToken $resolvedPat
+    } else {
+        if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
     }
 
     $downloadUrl = "$($azdoBase)/$($org)/$($project)/_apis/git/repositories/$($repo)/items?path=$($configFilePath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&resolveLfs=true&api-version=7.1-preview.1"
@@ -1018,19 +1056,39 @@ function Get-JsonMapContent {
         [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
     )
 
-    if (Test-Path $mapFilePath) {
+    if ($env:FC_LOCAL_FILES -and (Test-Path $mapFilePath)) {
         return Get-FileContent -filePath $mapFilePath | ConvertFrom-Json
     }
 
-    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }         else { $script:azdoBaseUrl }
     $org      = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName }    else { $script:organizationName }
-    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }         else { $script:projectName }
     $repo     = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }      else { $script:repositoryName }
-    $headers  = if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
+    $resolvedPat      = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))             { $AzdoConfig.Pat }             else { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType)) { $AzdoConfig.GitProviderType } else { "AzureDevOps" }
 
     $refSourceBranchName = $branchName
     if ($branchName -match "^refs/heads/") {
         $refSourceBranchName = $branchName -replace "^refs/heads/", ""
+    }
+
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+        $ghDownloadHeaders = @{
+            Authorization          = "Bearer $resolvedPat"
+            Accept                 = 'application/vnd.github.raw'
+            'X-GitHub-Api-Version' = '2022-11-28'
+        }
+        $normalizedPath = $mapFilePath.TrimStart("/")
+        $downloadUrl = "https://api.github.com/repos/$($org)/$($repo)/contents/$($normalizedPath)?ref=$($refSourceBranchName)"
+        $targetPath = Get-RemoteFile -FilePath $normalizedPath -DownloadUrl $downloadUrl -localFolder ".\temp" -Headers $ghDownloadHeaders
+        return Get-FileContent -filePath $targetPath | ConvertFrom-Json
+    }
+
+    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl } else { $script:azdoBaseUrl }
+    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName } else { $script:projectName }
+    $headers  = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) {
+        New-RequestHeader -authType "Basic" -accessToken $resolvedPat
+    } else {
+        if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
     }
 
     $downloadUrl = "$($azdoBase)/$($org)/$($project)/_apis/git/repositories/$($repo)/items?path=$($mapFilePath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&resolveLfs=true&api-version=7.1-preview.1"

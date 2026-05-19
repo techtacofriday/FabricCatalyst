@@ -5,13 +5,13 @@
 			"active": 1,
 			"subDomains": [
 				{
-					"name": "Workshop-20250428",
+					"name": "Workshop-20250518",
 					"active": 1,
 					"workspaces": [
 						{
 							"name": "Group-01",
 							"active": 1,
-							"capacity": "Trial-20260310T080742Z-oggEGTVcNEWUJF6KfhZxPQ",
+							"capacity": "my-fabric-capapcity",
 							"items": {
 								"lakehouses": [
 									{
@@ -51,7 +51,7 @@
 												"fileName": ".platform"
 											}
 										]
-									} 
+									}
 								]
 							},
 							"rbacAssignments": [

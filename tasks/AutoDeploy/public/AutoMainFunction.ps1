@@ -16,8 +16,9 @@ param
     [parameter(Mandatory = $false)] [String] $capacityName,
     [parameter(Mandatory = $false)] [String] $domainName,
     [parameter(Mandatory = $false)] [String] $subDomainName,
-    [ValidateSet("AzureDevOps")]
+    [ValidateSet("AzureDevOps","GitHub")]
     [parameter(Mandatory = $false)] [String] $gitProviderType = "AzureDevOps",
+    [parameter(Mandatory = $false)] [String] $externalGitPat,
     [parameter(Mandatory = $false)] [String] $organizationName,
     [parameter(Mandatory = $false)] [String] $projectName,
     [parameter(Mandatory = $false)] [String] $repositoryName,
@@ -235,7 +236,7 @@ try {
     $maxLength = ($scriptParams | Measure-Object -Maximum -Property Length).Maximum
     foreach ($param in $scriptParams) {
         $value = Get-Variable -Name $param -ValueOnly -ErrorAction SilentlyContinue
-        $displayValue = if ([string]::IsNullOrEmpty($value)) { "empty" } else { $value }
+        $displayValue = if ([string]::IsNullOrEmpty($value)) { "empty" } elseif ($param -eq 'externalGitPat') { '****' } else { $value }
         Write-Message "Info" ("{0,-$maxLength} : {1}" -f $param, $displayValue)
     }
 
@@ -247,11 +248,12 @@ try {
     }
     if ([Convert]::ToBoolean($script:customizeDeployment)) {
         $missingParams = @()
-        if ([string]::IsNullOrWhiteSpace($script:deploymentDirectoryPath)) { $missingParams += 'deploymentDirectoryPath' }
-        if ([string]::IsNullOrWhiteSpace($script:organizationName))         { $missingParams += 'organizationName' }
-        if ([string]::IsNullOrWhiteSpace($script:projectName))              { $missingParams += 'projectName' }
-        if ([string]::IsNullOrWhiteSpace($script:repositoryName))           { $missingParams += 'repositoryName' }
-        if ([string]::IsNullOrWhiteSpace($script:sourceBranchName))         { $missingParams += 'sourceBranchName' }
+        if ([string]::IsNullOrWhiteSpace($script:deploymentDirectoryPath))                                                                         { $missingParams += 'deploymentDirectoryPath' }
+        if ([string]::IsNullOrWhiteSpace($script:organizationName))                                                                                { $missingParams += 'organizationName' }
+        if ($script:gitProviderType -eq 'AzureDevOps' -and [string]::IsNullOrWhiteSpace($script:projectName))                                     { $missingParams += 'projectName' }
+        if ([string]::IsNullOrWhiteSpace($script:repositoryName))                                                                                  { $missingParams += 'repositoryName' }
+        if ([string]::IsNullOrWhiteSpace($script:sourceBranchName))                                                                                { $missingParams += 'sourceBranchName' }
+        if ($script:gitProviderType -eq 'GitHub' -and [string]::IsNullOrWhiteSpace($script:externalGitPat))                                       { $missingParams += 'externalGitPat' }
         if ($missingParams.Count -gt 0) {
             throw "customizeDeployment is 'True' but the following required parameters are missing or empty: $($missingParams -join ', ')"
         }
@@ -283,10 +285,11 @@ try {
 
         if ($environments | Where-Object { [bool]$_.gitEnabled }) {
             $missingGitParams = @()
-            if ([string]::IsNullOrWhiteSpace($script:organizationName))  { $missingGitParams += 'organizationName' }
-            if ([string]::IsNullOrWhiteSpace($script:projectName))        { $missingGitParams += 'projectName' }
-            if ([string]::IsNullOrWhiteSpace($script:repositoryName))     { $missingGitParams += 'repositoryName' }
-            if ([string]::IsNullOrWhiteSpace($script:sourceBranchName))   { $missingGitParams += 'sourceBranchName' }
+            if ([string]::IsNullOrWhiteSpace($script:organizationName))                                                                            { $missingGitParams += 'organizationName' }
+            if ($script:gitProviderType -eq 'AzureDevOps' -and [string]::IsNullOrWhiteSpace($script:projectName))                                 { $missingGitParams += 'projectName' }
+            if ([string]::IsNullOrWhiteSpace($script:repositoryName))                                                                              { $missingGitParams += 'repositoryName' }
+            if ([string]::IsNullOrWhiteSpace($script:sourceBranchName))                                                                            { $missingGitParams += 'sourceBranchName' }
+            if ($script:gitProviderType -eq 'GitHub' -and [string]::IsNullOrWhiteSpace($script:externalGitPat))                                   { $missingGitParams += 'externalGitPat' }
             if ($missingGitParams.Count -gt 0) {
                 throw "One or more environments have gitEnabled set but the following required Git parameters are missing or empty: $($missingGitParams -join ', ')"
             }
@@ -320,7 +323,9 @@ try {
                     -ProjectName         $script:projectName `
                     -RepositoryName      $script:repositoryName `
                     -SourceBranchName    $script:sourceBranchName `
-                    -DevOpsRequestHeader $script:devOpsRequestHeader
+                    -DevOpsRequestHeader $script:devOpsRequestHeader `
+                    -GitProviderType     $script:gitProviderType `
+                    -Pat                 $script:externalGitPat
                 if([Convert]::ToBoolean($script:useEmptyBranch)) {
                     New-GitBranchFromScratch -newBranchName $newBranchName -itemsGitFolder $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig | Out-Null
                 } else {
@@ -346,7 +351,9 @@ try {
                     -ProjectName         $script:projectName `
                     -RepositoryName      $script:repositoryName `
                     -SourceBranchName    $configBranchName `
-                    -DevOpsRequestHeader $script:devOpsRequestHeader
+                    -DevOpsRequestHeader $script:devOpsRequestHeader `
+                    -GitProviderType     $script:gitProviderType `
+                    -Pat                 $script:externalGitPat
                 if (-not (Test-DevOpsRepoPath -gitPath $configFilePath -branchName $configBranchName -AzdoConfig $azdoConfig)) {
                     throw "Customization config file '$configFilePath' not found in the repository. Stopping deployment for '$($workspaceFQN)'."
                 }

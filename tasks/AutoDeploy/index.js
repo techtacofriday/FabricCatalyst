@@ -24,8 +24,8 @@ function run() {
         for (const name of [
             'workspacePrefix', 'capacityName', 'environmentList',
             'fabricGitConnectionName', 'organizationName', 'projectName',
-            'repositoryName', 'sourceBranchName', 'itemsGitFolder',
-            'deploymentDirectoryPath', 'domainName', 'subDomainName',
+            'repositoryName', 'sourceBranchName', 'gitProviderType', 'externalGitPat',
+            'itemsGitFolder', 'deploymentDirectoryPath', 'domainName', 'subDomainName',
             'workspaceAdminsList', 'deploymentPipelineName', 'pipelineAdminsList',
             'fabricItemsLocation',
         ]) {

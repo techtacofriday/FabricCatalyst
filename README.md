@@ -107,6 +107,24 @@ This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_
 
 The task reads the JSON map file from `deploymentDirectoryPath`, provisions each workspace declared in the map, and deploys the items listed under each workspace. Item definition files (Notebooks, Semantic Models, Data Pipelines) are read from `deploymentDefinitionsPath`.
 
+To read item definitions from a GitHub repository, set `gitProviderType` to `GitHub` and supply a PAT. The `projectName` parameter is not used in GitHub mode — only `organizationName` (the GitHub org or user) and `repositoryName` are needed:
+
+```yaml
+- task: FabricCatalystMapDeploy@1
+  displayName: Deploy Fabric items from map (GitHub source)
+  inputs:
+    azureSubscription: 'my-fabric-service-connection'
+    organizationName: 'my-github-org'
+    repositoryName: 'fabric-items'
+    sourceBranchName: 'main'
+    gitProviderType: 'GitHub'
+    externalGitPat: '$(GitHubPat)'
+    jsonMapFileName: '_sqlMeetsFabric.json'
+    deploymentDirectoryPath: 'devops/pipelines/fabriccatalyst/dataproduct/deployment/map'
+```
+
+When reading from an external Azure DevOps tenant (a different org from the one running the pipeline), set `gitProviderType` to `AzureDevOps` and supply a PAT for that tenant via `externalGitPat`. The task will use Basic authentication with the provided PAT instead of the service connection token.
+
 **Promote Stage example:**
 
 ```yaml
@@ -307,10 +325,12 @@ Each task has full inline help in the ADO pipeline editor. Key parameters per ta
 | Parameter | Description |
 |---|---|
 | `azureSubscription` | Service connection for SP authentication |
-| `organizationName` | Azure DevOps organization name (the part after dev.azure.com/) |
-| `projectName` | Azure DevOps project containing the map file and item definitions |
+| `organizationName` | Azure DevOps organization name (after dev.azure.com/) or GitHub org/user when `gitProviderType` is `GitHub` |
+| `projectName` | Azure DevOps project containing the map file and item definitions; not used when `gitProviderType` is `GitHub` |
 | `repositoryName` | Repository that holds the map file and item definitions |
 | `sourceBranchName` | Branch from which to read the map file and item definitions |
+| `gitProviderType` | Source of item definitions: `AzureDevOps` (default) or `GitHub`. When set to `GitHub`, the task uses the GitHub REST API and `projectName` is ignored. When set to `AzureDevOps` with an `externalGitPat`, Basic auth is used against the external tenant instead of the service connection token. |
+| `externalGitPat` | PAT for an external Azure DevOps tenant or a GitHub repository. Must reference a secret pipeline variable, e.g. `$(ExternalGitPat)`. Leave empty when reading from the current Azure DevOps tenant. |
 | `jsonMapFileName` | Name of the JSON map file (default: `_sqlMeetsFabric.json`) |
 | `deploymentDirectoryPath` | Path in the repository to the folder containing the JSON map file |
 | `deploymentDefinitionsPath` | Path in the repository to the root of item definition files (Notebooks, Semantic Models, etc.); required when the map includes items with definition parts |

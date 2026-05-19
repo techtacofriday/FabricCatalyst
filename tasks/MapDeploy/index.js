@@ -23,8 +23,8 @@ function run() {
         // String inputs
         for (const name of [
             'jsonMapFileName', 'organizationName', 'projectName',
-            'repositoryName', 'sourceBranchName', 'deploymentDirectoryPath',
-            'deploymentDefinitionsPath', 'fabricItemsLocation',
+            'repositoryName', 'sourceBranchName', 'gitProviderType', 'externalGitPat',
+            'deploymentDirectoryPath', 'deploymentDefinitionsPath', 'fabricItemsLocation',
         ]) {
             env[`FC_${name.toUpperCase()}`] = tl.getInput(name, false) || '';
         }
