@@ -28,16 +28,52 @@ function New-GitBranchFromExisting {
     $project       = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }      else { $script:projectName }
     $repo          = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }   else { $script:repositoryName }
     $sourceBranch  = if ($null -ne $AzdoConfig) { $AzdoConfig.SourceBranchName } else { $script:sourceBranchName }
+    $resolvedPat      = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))             { $AzdoConfig.Pat }             else { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType)) { $AzdoConfig.GitProviderType } else { "AzureDevOps" }
+
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+        $script:gitHubRequestHeader = New-RequestHeader -authType "Bearer" -accessToken $resolvedPat
+        $script:gitHubRequestHeader['Accept'] = 'application/vnd.github+json'
+        $script:gitHubRequestHeader['X-GitHub-Api-Version'] = '2022-11-28'
+        $ghBase = "https://api.github.com"
+        $refResponse = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/ref/heads/$($sourceBranch)"
+        if ($refResponse.responseObject.StatusCode -eq 200) {
+            $sha = ($refResponse.responseObject.Content | ConvertFrom-Json).object.sha
+            $jsonBody = "{`"ref`":`"refs/heads/$($newBranchName)`",`"sha`":`"$($sha)`"}"
+            $createResponse = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs" -method "POST" -body $jsonBody
+            if ($createResponse.responseObject.StatusCode -eq 201) {
+                Write-Message "Info" "Branch $($newBranchName) was successfully branched out of $($sourceBranch) on GitHub."
+                return $repo
+            }
+            else {
+                throw (APIReturnedError -apiCallResponse $createResponse -intendedAction "creating a new git branch on GitHub")
+            }
+        }
+        else {
+            throw (APIReturnedError -apiCallResponse $refResponse -intendedAction "getting source branch SHA from GitHub")
+        }
+    }
+
+    $invokeHeader = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) { New-RequestHeader -authType "Basic" -accessToken $resolvedPat } else { $null }
 
     $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/refs?filter=heads/$($sourceBranch)&api-version=7.0"
-    $gitRepositoriesResponse = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint
+    $gitRepositoriesResponse = if ($null -ne $invokeHeader) {
+        Invoke-ApiEndpoint -CustomHeader $invokeHeader -baseUrl $azdoBase -endPoint $endPoint
+    } else {
+        Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint
+    }
     if ($gitRepositoriesResponse.responseObject.StatusCode -eq 200) {
         $refSourceBranchName = "refs/heads/$($sourceBranch)"
         $gitRepository = ($gitRepositoriesResponse.responseObject.Content | ConvertFrom-Json).value | Where-Object {$_.name -eq $refSourceBranchName}
         if ($null -ne $gitRepository) {
             $jsonBody = newBranchJsonBody -newBranchName $newBranchName -newObjectId $gitRepository.objectid
             $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/refs?api-version=6.0"
-            $newGitBranchReponse = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $jsonBody
+            $newGitBranchReponse = if ($null -ne $invokeHeader) {
+                Invoke-ApiEndpoint -CustomHeader $invokeHeader -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $jsonBody
+            } else {
+                Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $jsonBody
+            }
             if ($newGitBranchReponse.responseObject.StatusCode -eq 200) {
                 $newGitBranch = ($newGitBranchReponse.responseObject.Content | ConvertFrom-Json).value
                 Write-Message "Info" "Branch $($newBranchName) ($($newGitBranch.repositoryId)) was successfully branched out of $($sourceBranch)."
@@ -67,6 +103,43 @@ function New-GitBranchFromScratch {
     $project      = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }      else { $script:projectName }
     $repo         = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }   else { $script:repositoryName }
     $gitkeepPath  = $itemsGitFolder.TrimEnd('/') + '/.gitkeep'
+    $resolvedPat      = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))             { $AzdoConfig.Pat }             else { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType)) { $AzdoConfig.GitProviderType } else { "AzureDevOps" }
+
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+        $script:gitHubRequestHeader = New-RequestHeader -authType "Bearer" -accessToken $resolvedPat
+        $script:gitHubRequestHeader['Accept'] = 'application/vnd.github+json'
+        $script:gitHubRequestHeader['X-GitHub-Api-Version'] = '2022-11-28'
+        $ghBase = "https://api.github.com"
+
+        $blobResp = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/blobs" -method "POST" -body '{"content":"","encoding":"utf-8"}'
+        if ($blobResp.responseObject.StatusCode -ne 201) { throw (APIReturnedError -apiCallResponse $blobResp -intendedAction "creating blob on GitHub") }
+        $blobSha = ($blobResp.responseObject.Content | ConvertFrom-Json).sha
+
+        $normalizedKeep = $gitkeepPath.TrimStart('/')
+        $treeBody = "{`"tree`":[{`"path`":`"$($normalizedKeep)`",`"mode`":`"100644`",`"type`":`"blob`",`"sha`":`"$($blobSha)`"}]}"
+        $treeResp = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/trees" -method "POST" -body $treeBody
+        if ($treeResp.responseObject.StatusCode -ne 201) { throw (APIReturnedError -apiCallResponse $treeResp -intendedAction "creating tree on GitHub") }
+        $treeSha = ($treeResp.responseObject.Content | ConvertFrom-Json).sha
+
+        $commitBody = "{`"message`":`"Initialize empty branch`",`"tree`":`"$($treeSha)`",`"parents`":[]}"
+        $commitResp = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/commits" -method "POST" -body $commitBody
+        if ($commitResp.responseObject.StatusCode -ne 201) { throw (APIReturnedError -apiCallResponse $commitResp -intendedAction "creating commit on GitHub") }
+        $commitSha = ($commitResp.responseObject.Content | ConvertFrom-Json).sha
+
+        $refBody = "{`"ref`":`"refs/heads/$($newBranchName)`",`"sha`":`"$($commitSha)`"}"
+        $refResp = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs" -method "POST" -body $refBody
+        if ($refResp.responseObject.StatusCode -eq 201) {
+            Write-Message "Info" "Branch $($newBranchName) created as an independent root on GitHub."
+            return $newBranchName
+        }
+        else {
+            throw (APIReturnedError -apiCallResponse $refResp -intendedAction "creating orphan branch on GitHub")
+        }
+    }
+
+    $invokeHeader = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) { New-RequestHeader -authType "Basic" -accessToken $resolvedPat } else { $null }
 
     $jsonBody = @"
 {
@@ -87,7 +160,11 @@ function New-GitBranchFromScratch {
 "@
 
     $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/pushes?api-version=7.1"
-    $response = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $jsonBody
+    $response = if ($null -ne $invokeHeader) {
+        Invoke-ApiEndpoint -CustomHeader $invokeHeader -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $jsonBody
+    } else {
+        Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $jsonBody
+    }
     if ($response.responseObject.StatusCode -eq 201) {
         Write-Message "Info" "Branch $($newBranchName) created as an independent root."
         return $newBranchName

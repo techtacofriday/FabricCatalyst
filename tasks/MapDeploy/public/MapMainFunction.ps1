@@ -429,12 +429,17 @@ try {
 
     $definitionsLocalPath = $null
     if (-not [string]::IsNullOrWhiteSpace($deploymentDefinitionsPath)) {
-        Write-Message "Info" "Downloading item definitions from '$deploymentDefinitionsPath'."
         $tempDefinitionsRoot = ".\temp\FabricItems"
-        Copy-DevOpsRepoBranchRestAPI `
-            -gitPath $deploymentDefinitionsPath `
-            -localFolder $tempDefinitionsRoot `
-            -AzdoConfig $azdoConfig | Out-Null
+        if ($env:FC_LOCAL_FILES -and (Test-Path $deploymentDefinitionsPath)) {
+            Write-Message "Info" "Using local item definitions from '$deploymentDefinitionsPath'."
+            Copy-Item -Path $deploymentDefinitionsPath -Destination $tempDefinitionsRoot -Recurse -Force
+        } else {
+            Write-Message "Info" "Downloading item definitions from '$deploymentDefinitionsPath'."
+            Copy-DevOpsRepoBranchRestAPI `
+                -gitPath $deploymentDefinitionsPath `
+                -localFolder $tempDefinitionsRoot `
+                -AzdoConfig $azdoConfig | Out-Null
+        }
         $definitionsLocalPath = $tempDefinitionsRoot | Join-Path -ChildPath $deploymentDefinitionsPath
     }
 

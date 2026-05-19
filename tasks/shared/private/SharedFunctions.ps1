@@ -995,21 +995,43 @@ function Get-DeploymentCsvContent {
         [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
     )
 
-    if (Test-Path $configFilePath) {
+    if ($env:FC_LOCAL_FILES -and (Test-Path $configFilePath)) {
         $csvContent = Get-FileContent -filePath $configFilePath
         if ([string]::IsNullOrWhiteSpace($csvContent)) { return @("name,type,jsonPath,token") }
         return ($csvContent -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
     }
 
-    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }         else { $script:azdoBaseUrl }
     $org      = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName }    else { $script:organizationName }
-    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }         else { $script:projectName }
     $repo     = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }      else { $script:repositoryName }
-    $headers  = if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
+    $resolvedPat      = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))             { $AzdoConfig.Pat }             else { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType)) { $AzdoConfig.GitProviderType } else { "AzureDevOps" }
 
     $refSourceBranchName = $branchName
     if ($branchName -match "^refs/heads/") {
         $refSourceBranchName = $branchName -replace "^refs/heads/", ""
+    }
+
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+        $ghDownloadHeaders = @{
+            Authorization          = "Bearer $resolvedPat"
+            Accept                 = 'application/vnd.github.raw'
+            'X-GitHub-Api-Version' = '2022-11-28'
+        }
+        $normalizedPath = $configFilePath.TrimStart("/")
+        $downloadUrl = "https://api.github.com/repos/$($org)/$($repo)/contents/$($normalizedPath)?ref=$($refSourceBranchName)"
+        $targetPath = Get-RemoteFile -FilePath $normalizedPath -DownloadUrl $downloadUrl -localFolder ".\temp" -Headers $ghDownloadHeaders
+        $csvContent = Get-FileContent -filePath $targetPath
+        if ([string]::IsNullOrWhiteSpace($csvContent)) { return @("name,type,jsonPath,token") }
+        return ($csvContent -split "`r?`n") | Where-Object { -not [string]::IsNullOrWhiteSpace($_) }
+    }
+
+    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl } else { $script:azdoBaseUrl }
+    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName } else { $script:projectName }
+    $headers  = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) {
+        New-RequestHeader -authType "Basic" -accessToken $resolvedPat
+    } else {
+        if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
     }
 
     $downloadUrl = "$($azdoBase)/$($org)/$($project)/_apis/git/repositories/$($repo)/items?path=$($configFilePath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&resolveLfs=true&api-version=7.1-preview.1"
@@ -1034,19 +1056,39 @@ function Get-JsonMapContent {
         [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
     )
 
-    if (Test-Path $mapFilePath) {
+    if ($env:FC_LOCAL_FILES -and (Test-Path $mapFilePath)) {
         return Get-FileContent -filePath $mapFilePath | ConvertFrom-Json
     }
 
-    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }         else { $script:azdoBaseUrl }
     $org      = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName }    else { $script:organizationName }
-    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }         else { $script:projectName }
     $repo     = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }      else { $script:repositoryName }
-    $headers  = if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
+    $resolvedPat      = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))             { $AzdoConfig.Pat }             else { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType)) { $AzdoConfig.GitProviderType } else { "AzureDevOps" }
 
     $refSourceBranchName = $branchName
     if ($branchName -match "^refs/heads/") {
         $refSourceBranchName = $branchName -replace "^refs/heads/", ""
+    }
+
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+        $ghDownloadHeaders = @{
+            Authorization          = "Bearer $resolvedPat"
+            Accept                 = 'application/vnd.github.raw'
+            'X-GitHub-Api-Version' = '2022-11-28'
+        }
+        $normalizedPath = $mapFilePath.TrimStart("/")
+        $downloadUrl = "https://api.github.com/repos/$($org)/$($repo)/contents/$($normalizedPath)?ref=$($refSourceBranchName)"
+        $targetPath = Get-RemoteFile -FilePath $normalizedPath -DownloadUrl $downloadUrl -localFolder ".\temp" -Headers $ghDownloadHeaders
+        return Get-FileContent -filePath $targetPath | ConvertFrom-Json
+    }
+
+    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl } else { $script:azdoBaseUrl }
+    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName } else { $script:projectName }
+    $headers  = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) {
+        New-RequestHeader -authType "Basic" -accessToken $resolvedPat
+    } else {
+        if ($null -ne $AzdoConfig) { $AzdoConfig.DevOpsRequestHeader } else { $script:devOpsRequestHeader }
     }
 
     $downloadUrl = "$($azdoBase)/$($org)/$($project)/_apis/git/repositories/$($repo)/items?path=$($mapFilePath)&versionDescriptor.versionType=branch&versionDescriptor.version=$($refSourceBranchName)&resolveLfs=true&api-version=7.1-preview.1"
