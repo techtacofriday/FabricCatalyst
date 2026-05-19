@@ -2,16 +2,18 @@
 param()
 
 #region Read inputs forwarded by index.js via FC_* env vars
-$jsonMapFileName         = $env:FC_JSONMAPFILENAME
-$organizationName        = $env:FC_ORGANIZATIONNAME
-$projectName             = $env:FC_PROJECTNAME
-$repositoryName          = $env:FC_REPOSITORYNAME
-$sourceBranchName        = $env:FC_SOURCEBRANCHNAME
-$deploymentDirectoryPath  = $env:FC_DEPLOYMENTDIRECTORYPATH
+$jsonMapFileName           = $env:FC_JSONMAPFILENAME
+$organizationName          = $env:FC_ORGANIZATIONNAME
+$projectName               = $env:FC_PROJECTNAME
+$repositoryName            = $env:FC_REPOSITORYNAME
+$sourceBranchName          = $env:FC_SOURCEBRANCHNAME
+$gitProviderType           = if ($env:FC_GITPROVIDERTYPE) { $env:FC_GITPROVIDERTYPE } else { 'AzureDevOps' }
+$externalGitPat            = $env:FC_EXTERNALGITPAT
+$deploymentDirectoryPath   = $env:FC_DEPLOYMENTDIRECTORYPATH
 $deploymentDefinitionsPath = $env:FC_DEPLOYMENTDEFINITIONSPATH
-$fabricItemsLocation      = if ($env:FC_FABRICITEMSLOCATION) { $env:FC_FABRICITEMSLOCATION } else { 'LocalDirectory' }
-$updateDefinition        = $env:FC_UPDATEDEFINITION
-$enableDiagnostics       = $env:FC_ENABLEDIAGNOSTICS
+$fabricItemsLocation       = if ($env:FC_FABRICITEMSLOCATION) { $env:FC_FABRICITEMSLOCATION } else { 'LocalDirectory' }
+$updateDefinition          = $env:FC_UPDATEDEFINITION
+$enableDiagnostics         = $env:FC_ENABLEDIAGNOSTICS
 #endregion
 
 #region Azure authentication
@@ -47,6 +49,8 @@ $params = @{
     projectName                = $projectName
     repositoryName             = $repositoryName
     sourceBranchName           = $sourceBranchName
+    gitProviderType            = $gitProviderType
+    externalGitPat             = $externalGitPat
     deploymentDirectoryPath    = $deploymentDirectoryPath
     deploymentDefinitionsPath  = $deploymentDefinitionsPath
     fabricItemsLocation        = $fabricItemsLocation
