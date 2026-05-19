@@ -46,6 +46,19 @@ stages:
             steps:
               - checkout: none
 
+              - task: AzurePowerShell@5
+                displayName: "Retrieve secret value if exists"
+                condition: ne(variables['externalGitPatKVSecret'], '')
+                inputs:
+                  azureSubscription: ${{variables.azdoServiceConnection}}
+                  ScriptType: 'InlineScript'
+                  Inline: |
+                    $KVPASSWD = (Get-AzKeyVaultSecret -VaultName "$(azKeyVaultName)" -Name "$(externalGitPatKVSecret)" -AsPlainText)
+                    Write-Host "##vso[task.setvariable variable=KVPASSWD]$KVPASSWD"
+                  errorActionPreference: 'continue' ## scenario when key  vault does not exist
+                  azurePowerShellVersion: 'LatestVersion'
+                  pwsh: true 
+
               - task: FabricCatalystMapDeploy@1
                 displayName: 'Execute Powershell script'
                 inputs:
@@ -53,10 +66,12 @@ stages:
                   dataProduct: "${{parameters.dataProduct}}" 
                   jsonMapFileName: "${{parameters.jsonMapFileName}}" 
                   updateDefinition: "${{parameters.updateDefinition}}" 
-                  organizationName: "${{variables.organizationName}}" 
-                  projectName: "${{variables.projectName}}" 
-                  repositoryName: "${{variables.repositoryName}}" 
-                  sourceBranchName: "$(Build.SourceBranch)" 
+                  organizationName: "${{variables.organizationName}}"
+                  projectName: "${{variables.projectName}}"
+                  repositoryName: "${{variables.repositoryName}}"
+                  sourceBranchName: "$(Build.SourceBranch)"
+                  gitProviderType: "${{variables.gitProviderType}}"
+                  externalGitPat: "$(KVPASSWD)"
                   deploymentDirectoryPath: "${{variables.deploymentDirectoryPath}}"
                   deploymentDefinitionsPath: "${{variables.deploymentDefinitionsPath}}"
                   enableDiagnostics: "${{parameters.enableDiagnostics}}"

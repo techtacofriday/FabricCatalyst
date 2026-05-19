@@ -2,5 +2,5 @@ variables:
   #Azure DevOps (azdo) variables 
   azdoServiceConnection: azdo-serviceconnection-arm-d
   azdoEnvironment: Default-Auto
-  fabricCapacityName: "Trial-20260310T080742Z-oggEGTVcNEWUJF6KfhZxPQ"
+  fabricCapacityName: "my-fabric-capapcity"
   deploymentDirectoryPath: "devops/pipelines/dataproduct/deployment/auto"

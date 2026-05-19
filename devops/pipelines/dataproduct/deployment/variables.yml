@@ -4,3 +4,6 @@ variables:
   organizationName: "my-devops-org"
   projectName: "my-devops-project"
   repositoryName: "my-data-product-git-repo"
+  #ONLY IT THE ORGANIZATION IS OUT SIDE OF 
+  azKeyVaultName: "fabcat-shared-d-kv"
+  externalGitPatKVSecret: ""
