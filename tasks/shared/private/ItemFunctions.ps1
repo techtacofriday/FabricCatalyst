@@ -455,6 +455,32 @@ function Get-FabricItem {
     }
 }
 
+function Get-FabricItems {
+    param(
+        [Parameter(Mandatory = $true)]  [string]         $workspaceId,
+        [Parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
+    )
+    $results  = [System.Collections.Generic.List[object]]::new()
+    $endPoint = "/workspaces/$workspaceId/items" #https://learn.microsoft.com/en-us/rest/api/fabric/core/items/list-items
+
+    do {
+        $resp = Invoke-ApiEndpoint -endPoint $endPoint -Context $Context
+        if ($resp.responseObject.StatusCode -ne 200) {
+            throw (APIReturnedError -apiCallResponse $resp -intendedAction "list items in workspace '$workspaceId'")
+        }
+        $payload = $resp.responseObject.Content | ConvertFrom-Json
+        if ($null -ne $payload.value) { $results.AddRange([object[]]$payload.value) }
+
+        if (![string]::IsNullOrWhiteSpace($payload.continuationToken)) {
+            $endPoint = "/workspaces/$workspaceId/items?continuationToken=$([uri]::EscapeDataString($payload.continuationToken))"
+        } else {
+            $endPoint = $null
+        }
+    } while ($null -ne $endPoint)
+
+    return @($results)
+}
+
 function Get-FabricItemsByType {
     param(
         [Parameter(Mandatory = $true)] [string] $workspaceId,
@@ -478,7 +504,6 @@ function Get-FabricItemDefinition {
         [parameter(Mandatory = $true)]  [String]         $itemId,
         [parameter(Mandatory = $true)]  [string]         $itemType,
         [parameter(Mandatory = $true)]  [String]         $workspaceId,
-        [parameter(Mandatory = $false)] [int]            $outputPartsAsFiles = 0,
         [parameter(Mandatory = $false)] [String]         $outputFileDirectory = $null,
         [parameter(Mandatory = $false)] [String]         $format = $null,
         [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
@@ -503,7 +528,7 @@ function Get-FabricItemDefinition {
     else {
         $itemDefinition = $getDefinitionResponse.responseObject.Content | ConvertFrom-Json
     }
-    if ([bool]$outputPartsAsFiles) {
+    if (-not [string]::IsNullOrWhiteSpace($outputFileDirectory)) {
         foreach ($itemDefinitionPart in $itemDefinition.definition.parts) {
             $decodedPartContent = ConvertFrom-Payload -content $itemDefinitionPart.payload
             Export-ContentToFile `
