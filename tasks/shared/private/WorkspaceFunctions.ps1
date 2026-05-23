@@ -44,6 +44,32 @@ function Get-Workspaces {
     return @($payload.workspaces)  # always an array even if 0/1 items
 }
 
+function Get-WorkspacesCore {
+    [CmdletBinding()]
+    param(
+        [Parameter()] [PSCustomObject] $Context = $null
+    )
+    $results = [System.Collections.Generic.List[object]]::new()
+    $endPoint = "/workspaces" #https://learn.microsoft.com/en-us/rest/api/fabric/core/workspaces/list-workspaces
+
+    do {
+        $resp = Invoke-ApiEndpoint -endPoint $endPoint -Context $Context
+        if ($resp.responseObject.StatusCode -ne 200) {
+            throw (APIReturnedError -apiCallResponse $resp -intendedAction "list workspaces (core)")
+        }
+        $payload = $resp.responseObject.Content | ConvertFrom-Json
+        if ($null -ne $payload.value) { $results.AddRange([object[]]$payload.value) }
+
+        if (![string]::IsNullOrWhiteSpace($payload.continuationToken)) {
+            $endPoint = "/workspaces?continuationToken=$([uri]::EscapeDataString($payload.continuationToken))"
+        } else {
+            $endPoint = $null
+        }
+    } while ($null -ne $endPoint)
+
+    return @($results)
+}
+
 function New-FabricWorkspace {
     param (
         [parameter(Mandatory = $true)]  [String]         $workspaceName,
@@ -694,7 +720,6 @@ function ScanWorkspaceForSupportedItems {
                 -ItemId $newfabricItem.id `
                 -ItemType $newfabricItem.type `
                 -workspaceId $workspaceId `
-                -outputPartsAsFiles 1 `
                 -outputFileDirectory $newfabricItem.directory `
                 -format $supportedFabricItem.dfnFormat `
                 -Context $Context

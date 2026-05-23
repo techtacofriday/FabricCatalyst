@@ -930,7 +930,25 @@ function Initialize-AuthContext {
         $hasCredentials     = -not [string]::IsNullOrWhiteSpace($TenantId) -and -not [string]::IsNullOrWhiteSpace($ServicePrincipalId)
         $hasExistingContext = $null -ne (Get-AzContext -ErrorAction SilentlyContinue)
 
-        if ($hasCredentials) {
+        if (-not $hasCredentials) {
+            # Check existing context and connect if there's one available (save some login roundtrips)
+            # the current context can be cleared using Clear-AzContext -Force 
+            if (-not $hasExistingContext) {
+                # -UseDeviceAuthentication avoids the WAM broker (which needs a Win32 parent window handle
+                # and fails in PowerShell ISE / headless hosts). User pastes the printed code at
+                # https://microsoft.com/devicelogin in any browser and signs in with MFA.
+                if (-not [string]::IsNullOrWhiteSpace($TenantId)) {
+                    Write-Message "Action" "Connecting interactively (device-code MFA) on tenant '$TenantId'"
+                    Connect-AzAccount -Tenant $TenantId -UseDeviceAuthentication | Out-Null
+                }
+                else {
+                    Write-Message "Action" "Connecting interactively (device-code MFA)"
+                    Connect-AzAccount -UseDeviceAuthentication | Out-Null
+                }
+            }
+            # else: existing context present — reuse it as-is.
+        }
+        else  {
             # Explicit credentials supplied — always connect with them so the correct tenant is used,
             # even if there is already an active context pointing at a different tenant.
             if ([string]::IsNullOrWhiteSpace($ServicePrincipalSecret)) {
@@ -943,16 +961,6 @@ function Initialize-AuthContext {
             Write-Message "Action" "Connecting to Azure using Service Principal '$($ServicePrincipalId)' on tenant '$($TenantId)'"
             Connect-AzAccount -ServicePrincipal -Credential $credential -Tenant $TenantId | Out-Null
         }
-        elseif (-not $hasExistingContext) {
-            # No credentials provided and no existing context — prompt interactively.
-            $TenantId           = Read-Host "Enter Tenant ID"
-            $ServicePrincipalId = Read-Host "Enter Service Principal (Client) ID"
-            $secureSecret       = Read-Host -AsSecureString "Enter Service Principal Secret"
-            $credential = New-Object System.Management.Automation.PSCredential($ServicePrincipalId, $secureSecret)
-            Write-Message "Action" "Connecting to Azure using Service Principal '$($ServicePrincipalId)' on tenant '$($TenantId)'"
-            Connect-AzAccount -ServicePrincipal -Credential $credential -Tenant $TenantId | Out-Null
-        }
-        # else: no credentials provided but an existing context is present — reuse it as-is.
     }
 
     #Resource use to authenticate and get the tokens
