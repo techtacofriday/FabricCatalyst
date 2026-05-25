@@ -1,0 +1,9 @@
+{
+    "name": "fabriccatalyst-statedeploy",
+    "version": "1.0.0",
+    "description": "FabricCatalyst State Deploy task",
+    "main": "index.js",
+    "dependencies": {
+        "azure-pipelines-task-lib": "^5.2.10"
+    }
+}

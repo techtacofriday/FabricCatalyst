@@ -1,0 +1,131 @@
+{
+    "id": "c2e5a9f3-7b1d-4c8e-a0f4-3d6b9e2c5a7f",
+    "name": "FabricCatalystStateDeploy",
+    "friendlyName": "FabricCatalyst - State Deploy",
+    "description": "Enforces governance rules (domain assignment, capacity, RBAC) across Microsoft Fabric workspaces using a JSON state map.",
+    "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
+    "category": "Deploy",
+    "visibility": [
+        "Build",
+        "Release"
+    ],
+    "author": "TechTacoFriday",
+    "version": {
+        "Major": 1,
+        "Minor": 0,
+        "Patch": 0
+    },
+    "instanceNameFormat": "FabricCatalyst State Deploy $(jsonMapFileName)",
+    "groups": [
+        {
+            "name": "source",
+            "displayName": "Source",
+            "isExpanded": true
+        },
+        {
+            "name": "governance",
+            "displayName": "Governance",
+            "isExpanded": true
+        },
+        {
+            "name": "advanced",
+            "displayName": "Advanced",
+            "isExpanded": false
+        }
+    ],
+    "inputs": [
+        {
+            "name": "azureSubscription",
+            "type": "connectedService:AzureRM",
+            "label": "Azure Subscription",
+            "required": true,
+            "helpMarkDown": "Azure service connection used to obtain tokens for the Fabric and Microsoft Graph APIs."
+        },
+        {
+            "name": "organizationName",
+            "type": "string",
+            "label": "Azure DevOps Organization",
+            "required": true,
+            "groupName": "source",
+            "helpMarkDown": "Azure DevOps organization name (the part after dev.azure.com/)."
+        },
+        {
+            "name": "projectName",
+            "type": "string",
+            "label": "Azure DevOps Project",
+            "required": true,
+            "groupName": "source",
+            "helpMarkDown": "Azure DevOps project containing the state JSON file."
+        },
+        {
+            "name": "repositoryName",
+            "type": "string",
+            "label": "Repository Name",
+            "required": true,
+            "groupName": "source",
+            "helpMarkDown": "Repository that holds the state JSON file."
+        },
+        {
+            "name": "sourceBranchName",
+            "type": "string",
+            "label": "Source Branch",
+            "required": true,
+            "defaultValue": "main",
+            "groupName": "source",
+            "helpMarkDown": "Branch from which to read the state JSON file."
+        },
+        {
+            "name": "deploymentDirectoryPath",
+            "type": "string",
+            "label": "Deployment Directory Path",
+            "required": true,
+            "defaultValue": "devops/pipelines/fabriccatalyst/dataproduct/deployment/state",
+            "groupName": "source",
+            "helpMarkDown": "Path in the repository to the folder containing the state JSON file."
+        },
+        {
+            "name": "jsonMapFileName",
+            "type": "string",
+            "label": "State JSON File Name",
+            "required": true,
+            "defaultValue": "_demoState.json",
+            "groupName": "source",
+            "helpMarkDown": "Name of the JSON file that defines the governance rules."
+        },
+        {
+            "name": "whatIf",
+            "type": "boolean",
+            "label": "What-If (dry run)",
+            "required": false,
+            "defaultValue": "true",
+            "groupName": "governance",
+            "helpMarkDown": "When enabled, evaluates all rules and reports what would change without making any modifications. Run in What-If mode first to validate your rule set."
+        },
+        {
+            "name": "remove",
+            "type": "boolean",
+            "label": "Remove non-compliant workspaces",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "governance",
+            "helpMarkDown": "When enabled, workspaces matched by a rule under the remove path are deleted. Has no effect unless What-If is also disabled."
+        },
+        {
+            "name": "enableDiagnostics",
+            "type": "boolean",
+            "label": "Enable Diagnostics",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "advanced",
+            "helpMarkDown": "Outputs detailed diagnostic messages to the pipeline log."
+        }
+    ],
+    "execution": {
+        "Node20": {
+            "target": "index.js"
+        },
+        "Node16": {
+            "target": "index.js"
+        }
+    }
+}

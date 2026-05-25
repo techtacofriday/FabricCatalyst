@@ -58,12 +58,12 @@ try {
         throw "Stage '$($script:targetStageName)' not found in pipeline '$($script:deploymentPipelineName)'. Available stages: $available"
     }
     if ($target.order -eq 0) {
-        throw "Stage '$($script:targetStageName)' is the first stage (order 0) and cannot be a promotion target."
+        Write-Message "Warning" "Stage '$($script:targetStageName)' is the first stage (order 0) and cannot be a promotion target." 
     }
-
-    Write-Message "Action" "Promoting stage order $($target.order - 1) to $($target.order) ('$($script:targetStageName)') in pipeline '$($script:deploymentPipelineName)'."
-    Publish-PipelineStageByOrder -deploymentPipelineId $pipeline.id -stageOrder ($target.order - 1)
-
+    else {
+        Write-Message "Action" "Promoting stage order $($target.order - 1) to $($target.order) ('$($script:targetStageName)') in pipeline '$($script:deploymentPipelineName)'."
+        Publish-PipelineStageByOrder -deploymentPipelineId $pipeline.id -stageOrder ($target.order - 1)    
+    }
     Write-Message "Info" "Script execution completed successfully."
 }
 catch {

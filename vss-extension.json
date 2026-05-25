@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "fabriccatalyst",
     "publisher": "techtacofriday",
-    "version": "1.7.4",
+    "version": "1.7.6",
     "name": "FabricCatalyst",
     "description": "Azure DevOps tasks for deploying and managing Microsoft Fabric items across environments.",
     "public": true,
@@ -37,6 +37,8 @@
         { "path": "tasks/shared/private",  "packagePath": "tasks/UpdateFromGit/private" },
         { "path": "tasks/PipelineDeploy",  "packagePath": "tasks/PipelineDeploy" },
         { "path": "tasks/shared/private",  "packagePath": "tasks/PipelineDeploy/private" },
+        { "path": "tasks/StateDeploy",     "packagePath": "tasks/StateDeploy" },
+        { "path": "tasks/shared/private",  "packagePath": "tasks/StateDeploy/private" },
         { "path": "images/extension-icon.png", "addressable": true }
     ],
     "contributions": [
@@ -69,6 +71,12 @@
             "type": "ms.vss-distributed-task.task",
             "targets": [ "ms.vss-distributed-task.tasks" ],
             "properties": { "name": "tasks/PipelineDeploy" }
+        },
+        {
+            "id": "FabricCatalystStateDeploy",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [ "ms.vss-distributed-task.tasks" ],
+            "properties": { "name": "tasks/StateDeploy" }
         }
     ]
 }

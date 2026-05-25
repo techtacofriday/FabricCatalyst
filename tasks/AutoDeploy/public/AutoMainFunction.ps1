@@ -283,7 +283,7 @@ try {
         Write-Message "Action" "Iterating thru list of enviroments provided $($script:environmentList)"
         $environments = $script:environmentList | ConvertFrom-Json
 
-        if ($environments | Where-Object { [bool]$_.gitEnabled }) {
+        if ($environments | Where-Object { [int]$_.gitEnabled -eq 1 }) {
             $missingGitParams = @()
             if ([string]::IsNullOrWhiteSpace($script:organizationName))                                                                            { $missingGitParams += 'organizationName' }
             if ($script:gitProviderType -eq 'AzureDevOps' -and [string]::IsNullOrWhiteSpace($script:projectName))                                 { $missingGitParams += 'projectName' }
@@ -310,7 +310,7 @@ try {
 
             $configBranchName = $script:sourceBranchName
 
-            if([bool]$environment.gitEnabled) {
+            if([int]$environment.gitEnabled -eq 1) {
                 $script:fabricGitConnectionId = (Get-FabricConnection -connectionName $script:fabricGitConnectionName).id
                 if ([string]::IsNullOrWhiteSpace($script:fabricGitConnectionId)) {
                     throw "Cannot connect the workspace to Git because I could not locate the connection '$script:fabricGitConnectionName'"

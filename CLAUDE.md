@@ -21,6 +21,14 @@ powershell -NoProfile -File .\tasks\shared\tests\Invoke-Tests.ps1 -Output Detail
 
 Pester 5.0+ is required (not the Windows inbox version 3). The runner returns exit code 1 on test failures.
 
+## PowerShell string literal constraint
+
+**Never use non-ASCII characters inside string literals in `.ps1` files** (em dash `—`, curly quotes `""`, etc.).
+
+Windows PowerShell 5.1 reads `.ps1` files as Windows-1252 by default unless a UTF-8 BOM is present. Non-ASCII characters outside that code page corrupt the string, causing cascading parse errors (`The string is missing the terminator`, `Missing closing '}'`) that point to a line far below the actual offending character.
+
+Use plain ASCII equivalents: `-` instead of `—`, `"` instead of `""`.
+
 ## Architecture
 
 ### Extension structure
