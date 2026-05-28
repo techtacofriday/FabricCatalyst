@@ -1,8 +1,8 @@
-###############################################################################
+﻿###############################################################################
 # Accelerator:  FabricCatalyst
 # Script Name:  ExportMainFunction.ps1
 # Description:  Exports Fabric item definitions from one or more workspaces to local disk for offline exploration.
-# Author:       Svenchio — https://techtacofriday.com
+# Author:       Svenchio - https://techtacofriday.com
 # Project:      https://fabriccatalyst.com
 # Usage:        If executed as a Stand-alone script:
 #               Step 1. Open a new PowerShell session from the root of the script
@@ -22,7 +22,7 @@ param
     [parameter(Mandatory = $true)]  [String] $outputDirectory,
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
-    # Local-run auth — omit when running inside an ADO pipeline (AzurePowerShell@5 handles auth)
+    # Local-run auth omit when running inside an ADO pipeline (AzurePowerShell@5 handles auth)
     [parameter(Mandatory = $false)] [String] $tenantId,
     [parameter(Mandatory = $false)] [String] $servicePrincipalId,
     [parameter(Mandatory = $false)] [String] $servicePrincipalSecret
@@ -89,7 +89,7 @@ try {
         foreach ($item in $items) {
             Write-Message "Info" "  [$($item.type)] $($item.displayName) ($($item.id))"
             try {
-                $defOutDir = "$outputDirectory\$($workspace.displayName)\$($item.displayName)"
+                $defOutDir = "$outputDirectory\$($workspace.displayName)\$($item.displayName).$($item.type)"
                 $definition = Get-FabricItemDefinition `
                     -itemId              $item.id `
                     -itemType            $item.type `
