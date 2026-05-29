@@ -2,7 +2,7 @@
     "manifestVersion": 1,
     "id": "fabriccatalyst",
     "publisher": "techtacofriday",
-    "version": "1.7.6",
+    "version": "1.7.7",
     "name": "FabricCatalyst",
     "description": "Azure DevOps tasks for deploying and managing Microsoft Fabric items across environments.",
     "public": true,
