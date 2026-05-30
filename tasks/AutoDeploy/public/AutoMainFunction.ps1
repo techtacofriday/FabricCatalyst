@@ -329,6 +329,9 @@ try {
                 if([Convert]::ToBoolean($script:useEmptyBranch)) {
                     New-GitBranchFromScratch -newBranchName $newBranchName -itemsGitFolder $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig | Out-Null
                 } else {
+                    if (-not (Test-DevOpsRepoPath -gitPath $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig)) {
+                        throw "Path '$($script:itemsGitFolder)' not found in source branch '$($gitBranchAzdoConfig.SourceBranchName)'. Add this folder to the source branch before running the deployment."
+                    }
                     New-GitBranchFromExisting -newBranchName $newBranchName -AzdoConfig $gitBranchAzdoConfig | Out-Null
                 }
                 Write-Message "Action" "Connecting workspace $($workspaceFQN) ($($workspaceId)) to branch $($newBranchName)"
