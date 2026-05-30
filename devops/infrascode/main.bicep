@@ -15,48 +15,57 @@ param azTenantId string
 @description('Azure Subscription ID')
 param azSubscriptionId string
 
-@description('Resource group name')
-param azResourceGroupName string
+@description('Resource group name — ignored when skipKeyVault is true')
+param azResourceGroupName string = ''
 
 @description('Azure region for all resources')
 param azResourceGroupLocation string = 'norwayeast'
 
-@description('Key Vault name (3-24 chars, globally unique)')
-param azKeyVaultName string
+@description('Key Vault name (3-24 chars, globally unique) — ignored when skipKeyVault is true')
+param azKeyVaultName string = ''
 
-@description('Object ID of the Service Principal (FabricCatalyst.srvprincipal) — assigned subscription Reader directly')
+@description('Object ID of the Service Principal — assigned subscription Reader directly')
 param spnObjectId string
 
-@description('Object ID of sg-fabcat-owner security group — assigned Key Vault Administrator')
+@description('Object ID of the owner security group — assigned Key Vault Administrator')
 param ownerGroupObjectId string
 
-@description('Object ID of sg-fabcat-automation security group — assigned Key Vault Secrets User')
+@description('Object ID of the automation security group — assigned Key Vault Secrets User')
 param automationGroupObjectId string
+
+@description('Value for the Owner resource tag')
+param tagOwner string
+
+@description('Value for the ManagedBy resource tag')
+param tagManagedBy string
+
+@description('When true, skips resource group and Key Vault creation; subscription Reader is still assigned')
+param skipKeyVault bool = false
 
 //******************************************************************
 // VARIABLES
 //******************************************************************
 var resourceTags = {
-  Owner: 'svenchio@techtacofriday.com'
-  ManagedBy: 'FabricCatalyst-IaC'
+  Owner: tagOwner
+  ManagedBy: tagManagedBy
 }
 
 // Built-in role definition IDs (fixed GUIDs, same in every tenant)
 var readerRoleId = 'acdd72a7-3385-48ef-bd42-f606fba81ae7' // Reader
 
 //******************************************************************
-// RESOURCE GROUP
+// RESOURCE GROUP  (skipped when skipKeyVault = true)
 //******************************************************************
-resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = {
+resource rg 'Microsoft.Resources/resourceGroups@2023-07-01' = if (!skipKeyVault) {
   name: azResourceGroupName
   location: azResourceGroupLocation
   tags: resourceTags
 }
 
 //******************************************************************
-// KEY VAULT  (inlined — no external module dependency)
+// KEY VAULT  (skipped when skipKeyVault = true)
 //******************************************************************
-module keyVault '../../../templates/bicep/kv.bicep' = {
+module keyVault './bicep/kv.bicep' = if (!skipKeyVault) {
   name: 'deploy-keyvault'
   scope: rg
   params: {
@@ -70,7 +79,7 @@ module keyVault '../../../templates/bicep/kv.bicep' = {
 }
 
 //******************************************************************
-// SUBSCRIPTION-LEVEL ROLE ASSIGNMENT
+// SUBSCRIPTION-LEVEL ROLE ASSIGNMENT  (always deployed)
 // Reader on the subscription — lets the SPN enumerate workspaces,
 // capacities, and resource metadata without write access.
 //******************************************************************
@@ -82,9 +91,3 @@ resource spnSubscriptionReader 'Microsoft.Authorization/roleAssignments@2022-04-
     principalType: 'ServicePrincipal'
   }
 }
-
-//******************************************************************
-// OUTPUTS
-//******************************************************************
-output keyVaultId  string = keyVault.outputs.keyVaultId
-output keyVaultUri string = keyVault.outputs.keyVaultUri

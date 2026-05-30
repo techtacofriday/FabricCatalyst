@@ -6,13 +6,20 @@
 .DESCRIPTION
     Handles everything Bicep cannot:
       1. Creates (or reuses) the Entra ID App Registration + Service Principal
-      2. Declares Graph Application permissions  (User.Read.All, Group.Read.All)
-      3. Grants tenant-wide admin consent for those permissions
-      4. Deploys main.bicep  ->  Key Vault + role assignments + subscription Reader
-      5. Creates a client secret and stores credentials in Key Vault
+      2. Ensures the deployer is an owner of the App Registration
+      3. Declares Graph Application permissions  (User.Read.All, Group.Read.All)
+      4. Grants tenant-wide admin consent for those permissions
+      5. Creates (or reuses) the OwnerGroupName and AutomationGroupName security groups;
+         sets deployer as member + owner of OwnerGroupName, owner of AutomationGroupName;
+         adds the SPN as member of AutomationGroupName
+      6. Deploys main.bicep  ->  subscription Reader for the SPN (always);
+         resource group + Key Vault + KV role assignments (skipped if -SkipKeyVault)
+      7. Creates a client secret; stores it in Key Vault, or prints it to the terminal
+         if -SkipKeyVault (caller is responsible for secure storage in that case)
 
     The script is idempotent: re-running it with the same parameters is safe.
     Requires: Az PowerShell module  (Install-Module Az -Scope CurrentUser)
+              Az.KeyVault is only required when -SkipKeyVault is not set.
               An active login with:
                 - Application Administrator (or Global Admin) in Entra ID
                 - Owner / User Access Administrator on the target subscription
@@ -21,48 +28,79 @@
     Login before running:
         Connect-AzAccount -TenantId <tenantId>
 
-.PARAMETER SubscriptionId
-    Azure subscription ID where the Key Vault and role assignments will live.
-
 .PARAMETER TenantId
     Entra ID tenant ID.
 
+.PARAMETER SubscriptionId
+    Azure subscription ID where the Key Vault and role assignments will live.
+
 .PARAMETER ResourceGroupName
-    Name of the resource group to create.
+    Name of the resource group to create. Required unless -SkipKeyVault is set.
 
 .PARAMETER Location
     Azure region (default: norwayeast).
 
 .PARAMETER KeyVaultName
     Globally-unique Key Vault name (3-24 chars, alphanumeric + hyphens).
+    Required unless -SkipKeyVault is set.
+
+.PARAMETER SkipKeyVault
+    When set, skips resource group and Key Vault creation. The subscription Reader
+    role is still assigned. The client secret is printed to the terminal instead of
+    stored in a Key Vault — the caller is responsible for secure storage.
 
 .PARAMETER SpnDisplayName
     Display name for the App Registration / Service Principal.
-    Default: spn-fabcat-automation
 
-.PARAMETER BicepFile
-    Path to main.bicep. Defaults to the file beside this script.
+.PARAMETER OwnerGroupName
+    Display name of the KV Administrator security group.
+
+.PARAMETER AutomationGroupName
+    Display name of the KV Secrets User security group (SPN member).
+
+.PARAMETER TagOwner
+    Value written to the Owner resource tag on all provisioned resources.
+
+.PARAMETER TagManagedBy
+    Value written to the ManagedBy resource tag on all provisioned resources.
 
 .EXAMPLE
     .\setup-spn.ps1 `
-        -SubscriptionId    "0efa21d6-26d2-4cdd-b5fe-6082d08c3032" `
-        -TenantId          "8650e436-efa2-46c3-8288-a56355c8ebb8" `
-        -ResourceGroupName "fabriccatalyst-d-rg" `
-        -KeyVaultName      "fabcat-shared-d-kv-ne"
+        -TenantId            "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+        -SubscriptionId      "xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" `
+        -ResourceGroupName   "dataproduct-d-rg" `
+        -KeyVaultName        "dataproduct-shared-d-kv-ne" `
+        -Location            "norwayeast" `
+        -SpnDisplayName      "spn-dataproduct-automation" `
+        -OwnerGroupName      "sg-dataproduct-owner" `
+        -AutomationGroupName "sg-dataproduct-automation" `
+        -TagOwner            "user@mycompany.com" `
+        -TagManagedBy        "Business domain" 
 #>
-#Requires -Modules Az.Accounts, Az.Resources, Az.KeyVault
+#Requires -Modules Az.Accounts, Az.Resources
 
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory)] [string] $SubscriptionId,
     [Parameter(Mandatory)] [string] $TenantId,
-    [Parameter(Mandatory)] [string] $ResourceGroupName,
-    [string] $Location        = 'norwayeast',
-    [Parameter(Mandatory)] [string] $KeyVaultName,
-    [string] $SpnDisplayName  = 'spn-fabcat-automation',
-    [string] $BicepFile       = "$PSScriptRoot/main.bicep"
+    [Parameter(Mandatory)] [string] $SubscriptionId,
+    [Parameter()]          [string] $ResourceGroupName = '',
+    [Parameter()]          [string] $KeyVaultName      = '',
+    [Parameter(Mandatory)] [string] $Location,
+    [Parameter(Mandatory)] [string] $SpnDisplayName,
+    [Parameter(Mandatory)] [string] $OwnerGroupName,
+    [Parameter(Mandatory)] [string] $AutomationGroupName,
+    [Parameter(Mandatory)] [string] $TagOwner,
+    [Parameter(Mandatory)] [string] $TagManagedBy,
+    [switch]                        $SkipKeyVault
 )
 
+if (-not $SkipKeyVault) {
+    if (-not $ResourceGroupName) { throw "'-ResourceGroupName' is required when '-SkipKeyVault' is not set." }
+    if (-not $KeyVaultName)      { throw "'-KeyVaultName' is required when '-SkipKeyVault' is not set." }
+    if (-not $Location)          { throw "'-Location' is required when '-SkipKeyVault' is not set." }
+}
+
+$script:BicepFile            = "$PSScriptRoot/main.bicep"
 Set-StrictMode -Version Latest
 $ErrorActionPreference = 'Stop'
 
@@ -97,6 +135,20 @@ function Add-GroupOwnerIfMissing ([string]$GroupId, [string]$OwnerId, [string]$L
     }
 }
 
+function Add-AppOwnerIfMissing ([string]$AppObjectId, [string]$OwnerId, [string]$Label) {
+    $resp   = Invoke-AzRestMethod -Method GET -Uri "https://graph.microsoft.com/v1.0/applications/$AppObjectId/owners"
+    $owners = ($resp.Content | ConvertFrom-Json).value
+    if ($owners | Where-Object { $_.id -eq $OwnerId }) {
+        Write-Skip "$Label already an owner of the App Registration"
+    } else {
+        $body = @{ '@odata.id' = "https://graph.microsoft.com/v1.0/directoryObjects/$OwnerId" } | ConvertTo-Json -Compress
+        $null = Invoke-AzRestMethod -Method POST `
+            -Uri     "https://graph.microsoft.com/v1.0/applications/$AppObjectId/owners/`$ref" `
+            -Payload $body
+        Write-Ok "Added $Label as owner of the App Registration"
+    }
+}
+
 #------------------------------------------------------------------
 # 0. Ensure correct subscription context
 #------------------------------------------------------------------
@@ -104,18 +156,26 @@ Write-Step "Setting active subscription to $SubscriptionId"
 $null = Set-AzContext -SubscriptionId $SubscriptionId -TenantId $TenantId
 Write-Ok "Subscription set"
 
-# Capture the signed-in identity's object ID — Bicep needs this to grant
-# Key Vault Secrets Officer so we can write secrets in step 5.
+# Capture the signed-in identity's object ID so we can add the deployer
+# as member + owner of both security groups (steps 5/6).
 Write-Step "Resolving deployer identity"
 $context     = Get-AzContext
 $accountId   = $context.Account.Id
 $accountType = $context.Account.Type
 
-if ($accountType -eq 'User') {
-    $deployerObjectId = (Get-AzADUser -UserPrincipalName $accountId).Id
-} else {
-    # Service principal login (e.g. running inside a pipeline)
-    $deployerObjectId = (Get-AzADServicePrincipal -ApplicationId $accountId).Id
+switch ($accountType) {
+    'User' {
+        $deployerObjectId = (Get-AzADUser -UserPrincipalName $accountId).Id
+    }
+    'ManagedService' {
+        # Cloud Shell automatic login — token is user-scoped; /me resolves the actual user object ID
+        $meResp = Invoke-AzRestMethod -Method GET -Uri 'https://graph.microsoft.com/v1.0/me'
+        $deployerObjectId = ($meResp.Content | ConvertFrom-Json).id
+    }
+    default {
+        # Service principal login (e.g. running inside a pipeline)
+        $deployerObjectId = (Get-AzADServicePrincipal -ApplicationId $accountId).Id
+    }
 }
 if (-not $deployerObjectId) { throw "Could not resolve deployer object ID for account '$accountId'." }
 Write-Ok "Deployer object ID: $deployerObjectId"
@@ -136,6 +196,9 @@ if ($existingApp) {
     Write-Ok "Created App Registration appId=$appId"
 }
 
+Write-Step "Ensuring deployer owns App Registration '$SpnDisplayName'"
+Add-AppOwnerIfMissing -AppObjectId $appObjectId -OwnerId $deployerObjectId -Label 'deployer'
+
 #------------------------------------------------------------------
 # 2. Service Principal (idempotent)
 #------------------------------------------------------------------
@@ -145,7 +208,7 @@ if ($existingSp) {
     $spObjectId = $existingSp.Id
     Write-Skip "Service Principal objectId=$spObjectId"
 } else {
-    $newSp      = New-AzADServicePrincipal -ApplicationId $appId -SkipAssignment
+    $newSp      = New-AzADServicePrincipal -ApplicationId $appId
     $spObjectId = $newSp.Id
     Write-Ok "Created Service Principal objectId=$spObjectId"
 }
@@ -233,43 +296,43 @@ foreach ($permId in @($userReadAll, $groupReadAll)) {
 #------------------------------------------------------------------
 # 5. Security groups (idempotent)
 #
-#   sg-fabcat-owner       — KV Administrator; deployer is member + owner
-#   sg-fabcat-automation  — KV Secrets User;  SPN is member, deployer is owner
+#   $OwnerGroupName      — KV Administrator; deployer is member + owner
+#   $AutomationGroupName — KV Secrets User;  SPN is member, deployer is owner
 #------------------------------------------------------------------
-Write-Step "Resolving security group sg-fabcat-owner"
-$existingOwnerGrp = Get-AzADGroup -DisplayName 'sg-fabcat-owner' | Select-Object -First 1
+Write-Step "Resolving security group $OwnerGroupName"
+$existingOwnerGrp = Get-AzADGroup -DisplayName $OwnerGroupName | Select-Object -First 1
 if ($existingOwnerGrp) {
     $ownerGroupObjectId = $existingOwnerGrp.Id
-    Write-Skip "sg-fabcat-owner objectId=$ownerGroupObjectId"
+    Write-Skip "$OwnerGroupName objectId=$ownerGroupObjectId"
 } else {
-    $newOwnerGrp        = New-AzADGroup -DisplayName 'sg-fabcat-owner' -MailNickname 'sg-fabcat-owner'
+    $newOwnerGrp        = New-AzADGroup -DisplayName $OwnerGroupName -MailNickname $OwnerGroupName
     $ownerGroupObjectId = $newOwnerGrp.Id
-    Write-Ok "Created sg-fabcat-owner objectId=$ownerGroupObjectId"
+    Write-Ok "Created $OwnerGroupName objectId=$ownerGroupObjectId"
 }
 
-Write-Step "Configuring sg-fabcat-owner membership"
+Write-Step "Configuring $OwnerGroupName membership"
 Add-GroupMemberIfMissing -GroupId $ownerGroupObjectId -MemberId $deployerObjectId -Label 'deployer'
 Add-GroupOwnerIfMissing  -GroupId $ownerGroupObjectId -OwnerId  $deployerObjectId -Label 'deployer'
 
-Write-Step "Resolving security group sg-fabcat-automation"
-$existingAutoGrp = Get-AzADGroup -DisplayName 'sg-fabcat-automation' | Select-Object -First 1
+Write-Step "Resolving security group $AutomationGroupName"
+$existingAutoGrp = Get-AzADGroup -DisplayName $AutomationGroupName | Select-Object -First 1
 if ($existingAutoGrp) {
     $automationGroupObjectId = $existingAutoGrp.Id
-    Write-Skip "sg-fabcat-automation objectId=$automationGroupObjectId"
+    Write-Skip "$AutomationGroupName objectId=$automationGroupObjectId"
 } else {
-    $newAutoGrp              = New-AzADGroup -DisplayName 'sg-fabcat-automation' -MailNickname 'sg-fabcat-automation'
+    $newAutoGrp              = New-AzADGroup -DisplayName $AutomationGroupName -MailNickname $AutomationGroupName
     $automationGroupObjectId = $newAutoGrp.Id
-    Write-Ok "Created sg-fabcat-automation objectId=$automationGroupObjectId"
+    Write-Ok "Created $AutomationGroupName objectId=$automationGroupObjectId"
 }
 
-Write-Step "Configuring sg-fabcat-automation membership"
+Write-Step "Configuring $AutomationGroupName membership"
 Add-GroupMemberIfMissing -GroupId $automationGroupObjectId -MemberId $spObjectId      -Label 'SPN'
 Add-GroupOwnerIfMissing  -GroupId $automationGroupObjectId -OwnerId  $deployerObjectId -Label 'deployer'
 
 #------------------------------------------------------------------
 # 6. Deploy Bicep
-#    Creates: resource group, Key Vault, KV role assignments,
-#             subscription-level Reader role for the SPN.
+#    Always: subscription-level Reader role for the SPN.
+#    Unless -SkipKeyVault: resource group, Key Vault, KV role assignments.
 #------------------------------------------------------------------
 Write-Step "Deploying main.bicep (subscription scope)"
 
@@ -280,26 +343,33 @@ $deploymentParams = @{
     azResourceGroupName     = $ResourceGroupName
     azResourceGroupLocation = $Location
     azKeyVaultName          = $KeyVaultName
-    spnObjectId             = $spObjectId          # subscription Reader (direct)
-    ownerGroupObjectId      = $ownerGroupObjectId      # KV Administrator
-    automationGroupObjectId = $automationGroupObjectId  # KV Secrets User
+    spnObjectId             = $spObjectId
+    ownerGroupObjectId      = $ownerGroupObjectId
+    automationGroupObjectId = $automationGroupObjectId
+    tagOwner                = $TagOwner
+    tagManagedBy            = $TagManagedBy
+    skipKeyVault            = $SkipKeyVault.IsPresent
 }
 
-$deployment = New-AzDeployment `
+$null = New-AzDeployment `
     -Name                    $deploymentName `
     -Location                $Location `
-    -TemplateFile            $BicepFile `
+    -TemplateFile            $script:BicepFile `
     -TemplateParameterObject $deploymentParams
 
-$keyVaultUri = $deployment.Outputs['keyVaultUri'].Value
-Write-Ok "Key Vault provisioned: $keyVaultUri"
+if ($SkipKeyVault) {
+    Write-Ok "Subscription Reader assigned; Key Vault skipped"
+} else {
+    $keyVaultUri = "https://$KeyVaultName.vault.azure.net/"
+    Write-Ok "Key Vault provisioned: $keyVaultUri"
 
-# Role assignments propagate asynchronously in Entra ID.
-# Without a pause, Set-AzKeyVaultSecret fails with a 403 even though
-# the assignment was just created successfully.
-Write-Step "Waiting 30 s for RBAC role assignments to replicate in Entra ID"
-Start-Sleep -Seconds 30
-Write-Ok "Wait complete"
+    # Role assignments propagate asynchronously in Entra ID.
+    # Without a pause, Set-AzKeyVaultSecret fails with a 403 even though
+    # the assignment was just created successfully.
+    Write-Step "Waiting 30 s for RBAC role assignments to replicate in Entra ID"
+    Start-Sleep -Seconds 30
+    Write-Ok "Wait complete"
+}
 
 #------------------------------------------------------------------
 # 7. Client secret — always creates a fresh one (1-year expiry)
@@ -312,32 +382,48 @@ Write-Ok "Wait complete"
 #------------------------------------------------------------------
 Write-Step "Creating client secret"
 
-$secretDisplayName   = "FabricCatalyst-$(Get-Date -Format 'yyyy-MM-dd')"
-$secretExpiry        = (Get-Date).AddYears(1)
-# CustomKeyIdentifier must be a Base64-encoded byte array (Graph API binary field).
-$customKeyIdentifier = [Convert]::ToBase64String(
-    [System.Text.Encoding]::UTF8.GetBytes($secretDisplayName)
-)
-$credential          = New-AzADAppCredential `
-    -ObjectId            $appObjectId `
-    -CustomKeyIdentifier $customKeyIdentifier `
-    -EndDate             $secretExpiry
+$secretExpiry = (Get-Date).AddYears(1)
+$body = @{
+    passwordCredential = @{
+        displayName = "FabricCatalyst-$(Get-Date -Format 'yyyy-MM-dd')"
+        endDateTime = $secretExpiry.ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+    }
+} | ConvertTo-Json -Compress
 
-$clientSecret = $credential.SecretText
-Write-Ok "Client secret created (expires $($secretExpiry.ToString('yyyy-MM-dd')))"
+$resp = Invoke-AzRestMethod -Method POST `
+    -Uri     "https://graph.microsoft.com/v1.0/applications/$appObjectId/addPassword" `
+    -Payload $body
 
-Write-Step "Storing credentials in Key Vault '$KeyVaultName'"
-
-$secrets = @{
-    'scrt-entraid-automation-srvprincipal-clientid'  = $appId
-    'scrt-entraid-automation-srvprincipal-tenantid'  = $TenantId
-    'scrt-entraid-automation-srvprincipal-password'  = $clientSecret
+if ($resp.StatusCode -notin 200, 201) {
+    throw "Failed to create client secret. Status: $($resp.StatusCode). Body: $($resp.Content)"
 }
 
-foreach ($name in $secrets.Keys) {
-    $secureValue = ConvertTo-SecureString $secrets[$name] -AsPlainText -Force
-    $null = Set-AzKeyVaultSecret -VaultName $KeyVaultName -Name $name -SecretValue $secureValue
-    Write-Ok "Stored $name"
+$clientSecret = ($resp.Content | ConvertFrom-Json).secretText
+Write-Ok "Client secret created (expires $($secretExpiry.ToString('yyyy-MM-dd')))"
+
+if ($SkipKeyVault) {
+    Write-Host "`n================================================================" -ForegroundColor Yellow
+    Write-Host "  WARNING: -SkipKeyVault was set. Copy these credentials now." -ForegroundColor Yellow
+    Write-Host "  They cannot be retrieved after this session." -ForegroundColor Yellow
+    Write-Host "----------------------------------------------------------------" -ForegroundColor Yellow
+    Write-Host "  Client ID    : $appId"
+    Write-Host "  Tenant ID    : $TenantId"
+    Write-Host "  Client Secret: $clientSecret"
+    Write-Host "================================================================`n" -ForegroundColor Yellow
+} else {
+    Write-Step "Storing credentials in Key Vault '$KeyVaultName'"
+
+    $secrets = @{
+        'scrt-entraid-automation-srvprincipal-clientid'  = $appId
+        'scrt-entraid-automation-srvprincipal-tenantid'  = $TenantId
+        'scrt-entraid-automation-srvprincipal-password'  = $clientSecret
+    }
+
+    foreach ($name in $secrets.Keys) {
+        $secureValue = ConvertTo-SecureString $secrets[$name] -AsPlainText -Force
+        $null = Set-AzKeyVaultSecret -VaultName $KeyVaultName -Name $name -SecretValue $secureValue
+        Write-Ok "Stored $name"
+    }
 }
 
 # Scrub the secret from memory
@@ -351,8 +437,12 @@ Write-Host "  FabricCatalyst infrastructure setup complete." -ForegroundColor Gr
 Write-Host "----------------------------------------------------------------" -ForegroundColor Green
 Write-Host "  App Registration : $appId"
 Write-Host "  Service Principal: $spObjectId  ($SpnDisplayName)"
-Write-Host "  Security groups  : sg-fabcat-owner, sg-fabcat-automation"
-Write-Host "  Key Vault        : $keyVaultUri"
+Write-Host "  Security groups  : $OwnerGroupName, $AutomationGroupName"
+if ($SkipKeyVault) {
+    Write-Host "  Key Vault        : skipped (credentials printed above)"
+} else {
+    Write-Host "  Key Vault        : $keyVaultUri"
+}
 Write-Host "  Subscription role: Reader on $SubscriptionId"
 Write-Host "  Graph permissions: User.Read.All, Group.Read.All (Application, consented)"
 Write-Host "----------------------------------------------------------------" -ForegroundColor Green

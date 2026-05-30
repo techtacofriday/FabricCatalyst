@@ -128,12 +128,16 @@ function Connect-WorkspaceToGit {
     if ($connectToGit) {
         #Step 1. Configure the workspace to be Git-Enabled
         $gitProviderDetails = @{
-            gitProviderType  = $resolvedGitProviderType
-            organizationName = $resolvedOrganizationName
-            projectName      = $resolvedProjectName
-            repositoryName   = $resolvedRepositoryName
-            branchName       = $resolvedNewBranchName
-            directoryName    = $resolvedItemsGitFolder
+            gitProviderType = $resolvedGitProviderType
+            repositoryName  = $resolvedRepositoryName
+            branchName      = $resolvedNewBranchName
+            directoryName   = $resolvedItemsGitFolder
+        }
+        if ($resolvedGitProviderType -eq "AzureDevOps") {
+            $gitProviderDetails.organizationName = $resolvedOrganizationName
+            $gitProviderDetails.projectName      = $resolvedProjectName
+        } else {
+            $gitProviderDetails.ownerName = $resolvedOrganizationName
         }
         $myGitCredentials = @{
             source       = "ConfiguredConnection"
