@@ -217,17 +217,31 @@ function Invoke-ApiEndpoint {
                 responseObject = [PSCustomObject]@{
                     Message     = $parsedContent.message
                     ErrorCode   = $parsedContent.errorCode
-                    StatusCode  = $restMethodResponse.StatusCode 
+                    StatusCode  = $restMethodResponse.StatusCode
                     Body        = $restMethodResponse.Content
                 }
                 isException = $true
             }
-        } 
-        
+        }
+
+        if ($restMethodResponse.StatusCode -ge 400) {
+            # Non-2xx without a Fabric-style errorCode body (e.g. GitHub 422 uses "message" only)
+            $errMessage = if ($parsedContent -and $parsedContent.PSObject.Properties["message"]) { $parsedContent.message } else { "" }
+            return [PSCustomObject]@{
+                responseObject = [PSCustomObject]@{
+                    Message    = $errMessage
+                    ErrorCode  = "HTTP$($restMethodResponse.StatusCode)"
+                    StatusCode = $restMethodResponse.StatusCode
+                    Body       = $restMethodResponse.Content
+                }
+                isException = $true
+            }
+        }
+
         return [PSCustomObject]@{
             responseObject = [PSCustomObject]@{
                 StatusCode = $restMethodResponse.StatusCode
-                Content    = $restMethodResponse.Content 
+                Content    = $restMethodResponse.Content
                 Headers    = $restMethodResponse.Headers
             }
             isException = $false
