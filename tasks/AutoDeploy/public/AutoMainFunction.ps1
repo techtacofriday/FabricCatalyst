@@ -38,7 +38,7 @@ param
     [parameter(Mandatory = $false)] [String] $fabricItemsLocation = "LocalDirectory",
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
-    [parameter(Mandatory = $false)] [Bool] $developerView = $true,
+    [parameter(Mandatory = $false)] [Bool] $developerView = $false,
     # Local-run auth — omit when running inside an ADO pipeline (AzurePowerShell@5 handles auth)
     [parameter(Mandatory = $false)] [String] $tenantId,
     [parameter(Mandatory = $false)] [String] $servicePrincipalId,
