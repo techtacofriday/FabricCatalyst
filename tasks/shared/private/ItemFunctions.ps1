@@ -279,7 +279,7 @@ function New-ItemDefinitionParts {
             if ([bool]$dfnPart.updateJsonValues -or $csvData.Count -gt 0) {
                 $dfnFileExtension = [System.IO.Path]::GetExtension($dfnFilePath)
                 if ($dfnFileExtension -eq ".py") {
-                    $metadataPattern = [regex]::new('# METADATA \*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*(.*?)# CELL \*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*\*', 'Singleline')
+                    $metadataPattern = [regex]::new('# METADATA \*{20}(.*?)(?=\r?\n# [A-Z]+(?: [A-Z]+)* \*{20})', 'Singleline')
                     $metadataMatch = $metadataPattern.Match($partFileContent)
                     if ($metadataMatch.Success) {
                         $metadataJsonStr = ($metadataMatch.Groups[1].Value.Trim()) -replace '# META\s+', ''
