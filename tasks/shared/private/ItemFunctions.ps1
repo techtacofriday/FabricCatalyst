@@ -232,9 +232,10 @@ function New-ItemDefinitionParts {
             if ([bool]$dfnPart.isFolder -eq $true) {
                 # Fetch folder content recursively
                 if (Test-Path $dfnFilePath -PathType Container) {
-                    $folderContents = Get-ChildItem -Path $dfnFilePath -Recurse | ForEach-Object {
+                    $resolvedDfnDirectory = (Resolve-Path -Path $dfnDirectory).Path
+                    $folderContents = Get-ChildItem -Path $dfnFilePath -Recurse | Where-Object { -not $_.PSIsContainer } | ForEach-Object {
                         [PSCustomObject]@{
-                            fileName = $_.FullName.Substring($dfnDirectory.Length + 1)  # Relative path
+                            fileName = $_.FullName.Substring($resolvedDfnDirectory.Length + 1).Replace('\', '/')
                         }
                     }
 
