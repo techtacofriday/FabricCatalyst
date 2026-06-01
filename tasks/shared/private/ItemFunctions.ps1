@@ -77,16 +77,12 @@ function Invoke-FabricNotebook {
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [ValidatePattern('\S')]
-        [string] $notebookItemId,
-        [Bool] $whatIf = $true
+        [string] $notebookItemId
     )
     try {
         $body = @{ executionData = @{} } | ConvertTo-Json -Depth 10
         $endPoint = "/workspaces/$workspaceId/items/$notebookItemId/jobs/instances?jobType=RunNotebook"
-        if ($whatIf) {
-            Write-Message "Info" "What If flag is active, only showing the $($endPoint) to be executed."
-            return
-        }
+        Write-Message "Debug" "Invoke-FabricNotebook endpoint: $($endPoint)"
         $resp = Invoke-ApiEndpoint -endPoint $endPoint -method "POST" -body $body
         if ($resp.isException -eq $false) {
             if ($resp.responseObject.StatusCode -in 202) {
