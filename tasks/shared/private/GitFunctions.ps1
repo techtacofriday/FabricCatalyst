@@ -18,6 +18,57 @@ $jsonBody = @"
 return $jsonBody
 }
 
+function Remove-GitBranch {
+    param (
+        [parameter(Mandatory = $true)]  [String]         $branchName,
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+    )
+    $azdoBase = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }      else { $script:azdoBaseUrl }
+    $org      = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName } else { $script:organizationName }
+    $project  = if ($null -ne $AzdoConfig) { $AzdoConfig.ProjectName }      else { $script:projectName }
+    $repo     = if ($null -ne $AzdoConfig) { $AzdoConfig.RepositoryName }   else { $script:repositoryName }
+    $resolvedPat      = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.Pat))             { $AzdoConfig.Pat }             else { $null }
+    $resolvedProvider = if ($null -ne $AzdoConfig -and -not [string]::IsNullOrWhiteSpace($AzdoConfig.GitProviderType)) { $AzdoConfig.GitProviderType } else { "AzureDevOps" }
+
+    if ($resolvedProvider -eq "GitHub") {
+        if ([string]::IsNullOrWhiteSpace($resolvedPat)) { throw "A PAT is required when gitProviderType is 'GitHub'." }
+        $script:gitHubRequestHeader = New-RequestHeader -authType "Bearer" -accessToken $resolvedPat
+        $script:gitHubRequestHeader['Accept'] = 'application/vnd.github+json'
+        $script:gitHubRequestHeader['X-GitHub-Api-Version'] = '2022-11-28'
+        $ghBase = "https://api.github.com"
+        $deleteResponse = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs/heads/$($branchName)" -method "DELETE"
+        if ($deleteResponse.responseObject.StatusCode -ne 204) {
+            throw (APIReturnedError -apiCallResponse $deleteResponse -intendedAction "deleting existing branch '$branchName' on GitHub")
+        }
+        return
+    }
+
+    $invokeHeader = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) { New-RequestHeader -authType "Basic" -accessToken $resolvedPat } else { $null }
+
+    $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/refs?filter=heads/$($branchName)&api-version=7.0"
+    $refResponse = if ($null -ne $invokeHeader) {
+        Invoke-ApiEndpoint -CustomHeader $invokeHeader -baseUrl $azdoBase -endPoint $endPoint
+    } else {
+        Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint
+    }
+    if ($refResponse.responseObject.StatusCode -ne 200) {
+        throw (APIReturnedError -apiCallResponse $refResponse -intendedAction "getting SHA of branch '$branchName' before deletion")
+    }
+    $branchRef = ($refResponse.responseObject.Content | ConvertFrom-Json).value | Where-Object { $_.name -eq "refs/heads/$($branchName)" }
+    if ($null -eq $branchRef) { return }
+
+    $deleteBody = "[{`"name`":`"refs/heads/$($branchName)`",`"oldObjectId`":`"$($branchRef.objectId)`",`"newObjectId`":`"0000000000000000000000000000000000000000`"}]"
+    $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/refs?api-version=6.0"
+    $deleteResponse = if ($null -ne $invokeHeader) {
+        Invoke-ApiEndpoint -CustomHeader $invokeHeader -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $deleteBody
+    } else {
+        Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $endPoint -method "POST" -body $deleteBody
+    }
+    if ($deleteResponse.responseObject.StatusCode -ne 200) {
+        throw (APIReturnedError -apiCallResponse $deleteResponse -intendedAction "deleting existing branch '$branchName'")
+    }
+}
+
 function New-GitBranchFromExisting {
     param (
         [parameter(Mandatory = $true)]  [String]         $newBranchName,
@@ -42,6 +93,11 @@ function New-GitBranchFromExisting {
             $sha = ($refResponse.responseObject.Content | ConvertFrom-Json).object.sha
             $jsonBody = "{`"ref`":`"refs/heads/$($newBranchName)`",`"sha`":`"$($sha)`"}"
             $createResponse = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs" -method "POST" -body $jsonBody
+            if ($createResponse.responseObject.StatusCode -eq 422) {
+                Write-Message "Warning" "Branch $($newBranchName) already existed from a previous failed run - deleting and recreating."
+                Remove-GitBranch -branchName $newBranchName -AzdoConfig $AzdoConfig
+                $createResponse = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs" -method "POST" -body $jsonBody
+            }
             if ($createResponse.responseObject.StatusCode -eq 201) {
                 Write-Message "Info" "Branch $($newBranchName) was successfully branched out of $($sourceBranch) on GitHub."
                 return $repo
@@ -67,6 +123,19 @@ function New-GitBranchFromExisting {
         $refSourceBranchName = "refs/heads/$($sourceBranch)"
         $gitRepository = ($gitRepositoriesResponse.responseObject.Content | ConvertFrom-Json).value | Where-Object {$_.name -eq $refSourceBranchName}
         if ($null -ne $gitRepository) {
+            $targetEndPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/refs?filter=heads/$($newBranchName)&api-version=7.0"
+            $targetRefResponse = if ($null -ne $invokeHeader) {
+                Invoke-ApiEndpoint -CustomHeader $invokeHeader -baseUrl $azdoBase -endPoint $targetEndPoint
+            } else {
+                Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $targetEndPoint
+            }
+            if ($targetRefResponse.responseObject.StatusCode -eq 200) {
+                $existingRef = ($targetRefResponse.responseObject.Content | ConvertFrom-Json).value | Where-Object { $_.name -eq "refs/heads/$($newBranchName)" }
+                if ($null -ne $existingRef) {
+                    Write-Message "Warning" "Branch $($newBranchName) already existed from a previous failed run - deleting and recreating."
+                    Remove-GitBranch -branchName $newBranchName -AzdoConfig $AzdoConfig
+                }
+            }
             $jsonBody = newBranchJsonBody -newBranchName $newBranchName -newObjectId $gitRepository.objectid
             $endPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/refs?api-version=6.0"
             $newGitBranchReponse = if ($null -ne $invokeHeader) {

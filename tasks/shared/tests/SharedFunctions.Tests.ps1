@@ -849,6 +849,196 @@ Describe 'New-GitBranchFromExisting' {
 }
 
 # =============================================================================
+Describe 'Remove-GitBranch' {
+
+    BeforeAll {
+        . "$PSScriptRoot\..\private\GitFunctions.ps1"
+        Mock Write-Message { }
+        Mock New-RequestHeader { return @{ Authorization = 'Bearer pat' } }
+    }
+
+    BeforeEach {
+        $testConfig = New-AzdoConfig `
+            -AzdoBaseUrl         'https://dev.azure.com' `
+            -OrganizationName    'testOrg' `
+            -ProjectName         'testProject' `
+            -RepositoryName      'testRepo' `
+            -SourceBranchName    'main' `
+            -DevOpsRequestHeader @{ Authorization = 'Bearer test' }
+    }
+
+    Context 'GitHub provider' {
+        BeforeEach {
+            $ghConfig = New-AzdoConfig `
+                -AzdoBaseUrl      'https://dev.azure.com' `
+                -OrganizationName 'ghOrg' `
+                -ProjectName      'testProject' `
+                -RepositoryName   'ghRepo' `
+                -SourceBranchName 'main' `
+                -GitProviderType  'GitHub' `
+                -Pat              'ghpat'
+        }
+
+        It 'calls DELETE on the correct GitHub endpoint' {
+            Mock Invoke-ApiEndpoint {
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 204; Content = '' }; isException = $false }
+            }
+            Remove-GitBranch -branchName 'workspace/ws_old' -AzdoConfig $ghConfig
+            Should -Invoke Invoke-ApiEndpoint -ParameterFilter {
+                $endPoint -eq '/repos/ghOrg/ghRepo/git/refs/heads/workspace/ws_old' -and $method -eq 'DELETE'
+            }
+        }
+
+        It 'throws when DELETE does not return 204' {
+            Mock Invoke-ApiEndpoint {
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 500; Content = ''; Message = 'error'; Body = '' }; isException = $false }
+            }
+            { Remove-GitBranch -branchName 'workspace/ws_old' -AzdoConfig $ghConfig } | Should -Throw
+        }
+    }
+
+    Context 'AzureDevOps provider' {
+        It 'GETs the branch SHA then POSTs zeros to delete' {
+            $callCount = 0
+            Mock Invoke-ApiEndpoint {
+                $callCount++
+                if ($callCount -eq 1) {
+                    $content = '{"value":[{"name":"refs/heads/workspace/ws_old","objectId":"deadbeef"}]}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = '{"value":[]}' }; isException = $false }
+            }
+            Remove-GitBranch -branchName 'workspace/ws_old' -AzdoConfig $testConfig
+            Should -Invoke Invoke-ApiEndpoint -Times 2 -Exactly
+            Should -Invoke Invoke-ApiEndpoint -ParameterFilter {
+                $body -like '*"newObjectId":"0000000000000000000000000000000000000000"*'
+            }
+        }
+
+        It 'returns without error when branch is already gone' {
+            Mock Invoke-ApiEndpoint {
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = '{"value":[]}' }; isException = $false }
+            }
+            { Remove-GitBranch -branchName 'workspace/ws_old' -AzdoConfig $testConfig } | Should -Not -Throw
+            Should -Invoke Invoke-ApiEndpoint -Times 1 -Exactly
+        }
+
+        It 'throws when the GET SHA call fails' {
+            Mock Invoke-ApiEndpoint {
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 500; Content = ''; Message = 'error'; Body = '' }; isException = $false }
+            }
+            { Remove-GitBranch -branchName 'workspace/ws_old' -AzdoConfig $testConfig } | Should -Throw
+        }
+    }
+}
+
+# =============================================================================
+Describe 'New-GitBranchFromExisting - stale branch recovery' {
+
+    BeforeAll {
+        . "$PSScriptRoot\..\private\GitFunctions.ps1"
+        Mock Write-Message { }
+        Mock New-RequestHeader { return @{ Authorization = 'Bearer pat' } }
+        Mock APIReturnedError { return "mocked-error" }
+    }
+
+    Context 'GitHub provider - branch already exists (422)' {
+        BeforeEach {
+            $ghConfig = New-AzdoConfig `
+                -AzdoBaseUrl      'https://dev.azure.com' `
+                -OrganizationName 'ghOrg' `
+                -ProjectName      'testProject' `
+                -RepositoryName   'ghRepo' `
+                -SourceBranchName 'main' `
+                -GitProviderType  'GitHub' `
+                -Pat              'ghpat'
+
+            $callSequence = [System.Collections.Generic.List[int]]::new()
+            Mock Invoke-ApiEndpoint {
+                $callSequence.Add(1)
+                $n = $callSequence.Count
+                if ($n -eq 1) {
+                    # GET source SHA
+                    $content = '{"object":{"sha":"abc123"}}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                if ($n -eq 2) {
+                    # POST create - already exists
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 422; Content = ''; Message = 'Reference already exists'; Body = '' }; isException = $false }
+                }
+                if ($n -eq 3) {
+                    # DELETE (Remove-GitBranch)
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 204; Content = '' }; isException = $false }
+                }
+                # POST retry create
+                $content = '{"ref":"refs/heads/workspace/ws_dev","sha":"abc123"}'
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = $content }; isException = $false }
+            }
+        }
+
+        It 'deletes the stale branch and retries when create returns 422' {
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig | Out-Null
+            Should -Invoke Invoke-ApiEndpoint -Times 4 -Exactly
+        }
+
+        It 'emits a Warning message when recovering a stale branch' {
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig | Out-Null
+            Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
+        }
+    }
+
+    Context 'AzureDevOps provider - branch already exists' {
+        BeforeEach {
+            $testConfig = New-AzdoConfig `
+                -AzdoBaseUrl         'https://dev.azure.com' `
+                -OrganizationName    'testOrg' `
+                -ProjectName         'testProject' `
+                -RepositoryName      'testRepo' `
+                -SourceBranchName    'main' `
+                -DevOpsRequestHeader @{ Authorization = 'Bearer test' }
+
+            $callSequence = [System.Collections.Generic.List[int]]::new()
+            Mock Invoke-ApiEndpoint {
+                $callSequence.Add(1)
+                $n = $callSequence.Count
+                if ($n -eq 1) {
+                    # GET source branch refs
+                    $content = '{"value":[{"name":"refs/heads/main","objectid":"abc123"}]}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                if ($n -eq 2) {
+                    # GET target branch - exists
+                    $content = '{"value":[{"name":"refs/heads/workspace/ws_dev","objectId":"oldsha"}]}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                if ($n -eq 3) {
+                    # GET SHA for Remove-GitBranch
+                    $content = '{"value":[{"name":"refs/heads/workspace/ws_dev","objectId":"oldsha"}]}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                if ($n -eq 4) {
+                    # POST zeros (delete)
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = '{"value":[]}' }; isException = $false }
+                }
+                # POST create new branch
+                $content = '{"value":[{"repositoryId":"repo-123"}]}'
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+            }
+        }
+
+        It 'detects stale branch, deletes it, and creates fresh' {
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig | Out-Null
+            Should -Invoke Invoke-ApiEndpoint -Times 5 -Exactly
+        }
+
+        It 'emits a Warning message when recovering a stale branch' {
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig | Out-Null
+            Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
+        }
+    }
+}
+
+# =============================================================================
 Describe 'Test-DevOpsRepoPath' {
 
     BeforeAll {
