@@ -16,7 +16,7 @@ Git integration exists, but it does not provision workspaces. Deployment pipelin
 
 If you want repeatable, automated deployments across dev, test, and prod environments — the kind of thing you would take for granted in Azure with Bicep and Azure DevOps — Fabric does not have a first-class answer for that yet. FabricCatalyst is mine.
 
-It is an Azure DevOps extension that handles workspace provisioning, Git wiring, tiered item deployment, and environment-specific configuration in pipeline tasks that slot into your existing ADO workflows.
+It is an Azure DevOps extension that handles workspace provisioning, Git wiring, role assignments, deployment pipeline setup, and environment-specific configuration in pipeline tasks that slot into your existing ADO workflows.
 
 ---
 
@@ -24,18 +24,16 @@ It is an Azure DevOps extension that handles workspace provisioning, Git wiring,
 
 | Task | When to use it |
 |---|---|
-| **FabricCatalyst - Auto Deployment** | Git-connected workspaces across environments. Discovers items from a branch and deploys in dependency order. The primary task for teams adopting DevOps-first Fabric workflows. |
+| **FabricCatalyst - Auto Deployment** | Provisions workspaces, connects them to Git branches using Fabric's built-in Git integration, assigns roles, and optionally creates a Fabric deployment pipeline. The infrastructure task for teams adopting DevOps-first Fabric workflows. |
+| **FabricCatalyst - Update From Git** | Syncs a Fabric workspace from its connected Git branch. Optionally patches Git credentials, binds semantic models to connections, and runs post-sync notebooks for row-level security setup. Run this after Auto Deployment to pull item content from Git. |
+| **FabricCatalyst - Promote Stage** | Promotes items from one Fabric deployment pipeline stage to the next, identified by display name. Use when advancing content through dev → test → prod inside a Fabric deployment pipeline created by Auto Deployment. |
 | **FabricCatalyst - Map Deployment** | JSON-map-driven deployment. The map declares a domain → sub-domain → workspace → items hierarchy; the task provisions each workspace and deploys items with inline environment-specific configuration. Use for SQL-to-Fabric migration scenarios where items are not yet Git-connected. |
-| **FabricCatalyst - Promote Stage** | Promotes items from one Fabric deployment pipeline stage to the next, identified by display name. Use when advancing content through dev → test → prod inside a Fabric deployment pipeline. |
-| **FabricCatalyst - Update From Git** | Syncs a Fabric workspace from its connected Git branch. Optionally patches Git credentials, binds semantic models to connections, and runs post-sync notebooks for row-level security setup. |
 
-Auto Deployment deploys in dependency order across three tiers:
+The recommended sequence for a full Auto Deployment workflow:
 
-- **Tier 1** — Lakehouse, Warehouse, SQL Database (no dependencies)
-- **Tier 2** — Notebook, Semantic Model (depend on Tier 1)
-- **Tier 3** — Data Pipeline, Report (depend on Tier 2)
-
-You do not manage deployment order. FabricCatalyst does.
+1. **Auto Deployment** — create workspaces, wire Git, create the deployment pipeline (runs once per environment setup, then idempotent on subsequent runs)
+2. **Update From Git** — sync item content from the Git branch into each Git-enabled workspace
+3. **Promote Stage** — advance content through the Fabric deployment pipeline stages (dev → test → prod)
 
 ---
 
@@ -83,10 +81,10 @@ Minimal Auto Deployment example:
     projectName: 'MyProject'
     repositoryName: 'fabric-items'
     sourceBranchName: 'main'
-    itemsGitFolder: '/fabric/gitenabled'
+    itemsGitFolder: '/fabric'
 ```
 
-This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, deploys all Fabric items in tier order, and syncs workspace role assignments.
+This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, and syncs workspace role assignments. Use `FabricCatalystUpdateFromGit@1` in a subsequent step to pull item content from Git into the connected workspace.
 
 **Map Deployment example:**
 
@@ -164,11 +162,7 @@ Trigger the pipeline. Watch the logs. The first run provisions everything; subse
 Deployment configuration lives in CSV files in your repository, organized by data product and deployment mode:
 
 ```
-devops/pipelines/fabriccatalyst/dataproduct/deployment/
-  <DataProduct>/
-    custom/
-      config-dev.csv
-      config-uat.csv
+devops/pipelines/dataproduct/deployment/
     map/
       _myMap.json         # item mapping for Map mode
 ```
@@ -205,14 +199,30 @@ Given this Fabric Notebook metadata block:
 }
 ```
 
-A matching config CSV looks like this (columns: `name`, `type`, `jsonPath`, `token`):
+A matching config CSV looks like this:
 
-```csv
-name,type,jsonPath,token
-*,Notebook,kernel_info.name,synapse_pyspark
-*,Notebook,dependencies.lakehouse.default_lakehouse,#{Default.Lakehouse.Id}#
-*,Notebook,dependencies.lakehouse.default_lakehouse_name,LH_Bronze
-*,Notebook,dependencies.lakehouse.default_lakehouse_workspace_id,#{MyWorkspace.Id}#
+```
+{
+    "fileName": "notebook-content.py",
+    "csvData": [
+        {
+	        "jsonPath": "dependencies.environment.workspaceId",
+	        "token": "#{my-workspace.Id}#"
+	    },
+	    {
+	        "jsonPath": "dependencies.lakehouse.default_lakehouse",
+	        "token": "#{my-workspace.my-lakehouse.Id}#"
+	    },
+	    {
+	        "jsonPath": "dependencies.lakehouse.default_lakehouse_name",
+	        "token": "#{my-workspace.my-lakehouse.Name}#"
+	    },
+	    {
+	        "jsonPath": "dependencies.lakehouse.default_lakehouse_workspace_id",
+		    "token": "#{my-workspace.Id}#"
+	    }
+    ]
+}
 ```
 
 #### Path syntax reference
@@ -263,15 +273,6 @@ Omitting the trailing property makes the array element itself the write target. 
 | `known_lakehouses['id=old-guid']` | Replaces the object whose `id` equals `old-guid` |
 | `known_lakehouses[*]` | Replaces every object in the array |
 
-Example CSV rows:
-
-```csv
-name,type,jsonPath,token
-*,Notebook,known_lakehouses[0],"{""id"":""#{Default.Lakehouse.Id}#""}"
-*,DataPipeline,activities['type=Copy'],"{""name"":""CopyData"",""type"":""Copy"",""typeProperties"":{...}}"
-```
-
-> When the token is a JSON object, wrap the entire column value in double quotes and escape inner double quotes by doubling them (`""`), as shown above.
 
 #### Value type behaviour
 

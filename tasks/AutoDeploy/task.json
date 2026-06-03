@@ -2,7 +2,7 @@
     "id": "e377abce-fe73-4026-a275-46369405abf1",
     "name": "FabricCatalystAutoDeploy",
     "friendlyName": "FabricCatalyst - Auto Deployment",
-    "description": "Deploys Microsoft Fabric items from a Git-connected workspace using branch auto-discovery. Handles tiered deployment of Lakehouses, Warehouses, Notebooks, Semantic Models, Data Pipelines and Reports.",
+    "description": "Provisions Fabric workspaces, connects them to Git branches using Fabric's built-in Git integration, assigns workspace roles, and optionally creates a Fabric deployment pipeline.",
     "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
     "category": "Deploy",
     "visibility": [
@@ -13,7 +13,7 @@
     "version": {
         "Major": 2,
         "Minor": 0,
-        "Patch": 3
+        "Patch": 4
     },
     "instanceNameFormat": "FabricCatalyst Auto Deploy $(workspacePrefix)",
     "groups": [
