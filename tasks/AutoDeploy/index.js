@@ -33,7 +33,7 @@ function run() {
 
         // Boolean inputs (PowerShell expects 'True'/'False')
         for (const name of [
-            'useEmptyBranch', 'createDeploymentPipeline',
+            'useEmptyBranch', 'forceRecreateBranch', 'createDeploymentPipeline',
             'enableDiagnostics',
         ]) {
             env[`FC_${name.toUpperCase()}`] = tl.getBoolInput(name, false) ? 'True' : 'False';

@@ -310,6 +310,7 @@ Each task has full inline help in the ADO pipeline editor. Key parameters per ta
 | `sourceBranchName` | Branch from which items are discovered and deployed |
 | `itemsGitFolder` | Path in the repository where Git-enabled Fabric items are stored |
 | `useEmptyBranch` | When true, creates a new empty branch before syncing |
+| `forceRecreateBranch` | When true, deletes and re-creates the workspace branch if it already exists. Default is false: if the branch exists the task skips creation and proceeds directly to connecting the workspace to Git (safe for adding new environments to an already-deployed solution). Only set this when you need to reset a branch that is preventing a Git sync. |
 | `createDeploymentPipeline` | When true, creates a Fabric deployment pipeline |
 | `deploymentPipelineName` | Name of the deployment pipeline to create; required when `createDeploymentPipeline` is true |
 | `pipelineAdminsList` | Semicolon-separated UPNs to assign as Pipeline Admin |

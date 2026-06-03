@@ -70,7 +70,7 @@ Authentication goes through a single **Azure Resource Manager service connection
     itemsGitFolder: '/fabric/gitenabled'
 ```
 
-This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, and deploys all Fabric items in tier order. Subsequent runs are idempotent.
+This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, and deploys all Fabric items in tier order. Subsequent runs are idempotent. If the workspace branch already exists the task skips branch creation and proceeds directly to connecting the workspace to Git — safe for adding new environments to an already-deployed solution. Set `forceRecreateBranch: true` only when you need to reset a branch that is preventing a Git sync.
 
 **Promote Stage** — advance items through a Fabric deployment pipeline:
 
