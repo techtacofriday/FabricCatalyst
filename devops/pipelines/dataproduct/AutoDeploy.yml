@@ -71,11 +71,6 @@ parameters:
   type: string
   default: "/fabric/gitenabled"
 
-- name: customizeDeployment
-  displayName: "Customize Deployment?"
-  type: boolean
-  default: False
-
 - name: enableDiagnostics
   displayName: "Enable Diagnostics?"
   type: boolean
@@ -100,7 +95,7 @@ stages:
               steps:
                 - checkout: none
 
-                - task: FabricCatalystAutoDeploy@1
+                - task: FabricCatalystAutoDeploy@2
                   displayName: 'FabricCatalyst - Auto Deployment'
                   inputs:
                     azureSubscription: ${{ variables.azdoServiceConnection }}
@@ -117,8 +112,6 @@ stages:
                     sourceBranchName: ${{ parameters.sourceBranchName }}
                     itemsGitFolder: ${{ parameters.itemsGitFolder }}
                     useEmptyBranch: ${{ parameters.useEmptyBranch }}
-                    deploymentDirectoryPath: ${{ variables.deploymentDirectoryPath }}
-                    customizeDeployment: ${{ parameters.customizeDeployment }}
                     enableDiagnostics: ${{ parameters.enableDiagnostics }}
 
   - ${{ if eq(parameters.createDeploymentPipeline, true) }}:
