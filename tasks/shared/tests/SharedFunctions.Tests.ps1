@@ -933,7 +933,7 @@ Describe 'Remove-GitBranch' {
 }
 
 # =============================================================================
-Describe 'New-GitBranchFromExisting - stale branch recovery' {
+Describe 'New-GitBranchFromExisting - stale branch recovery (-ForceRecreate)' {
 
     BeforeAll {
         . "$PSScriptRoot\..\private\GitFunctions.ps1"
@@ -977,12 +977,12 @@ Describe 'New-GitBranchFromExisting - stale branch recovery' {
         }
 
         It 'deletes the stale branch and retries when create returns 422' {
-            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig | Out-Null
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig -ForceRecreate | Out-Null
             Should -Invoke Invoke-ApiEndpoint -Times 4 -Exactly
         }
 
         It 'emits a Warning message when recovering a stale branch' {
-            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig | Out-Null
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig -ForceRecreate | Out-Null
             Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
         }
     }
@@ -1027,11 +1027,92 @@ Describe 'New-GitBranchFromExisting - stale branch recovery' {
         }
 
         It 'detects stale branch, deletes it, and creates fresh' {
-            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig | Out-Null
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig -ForceRecreate | Out-Null
             Should -Invoke Invoke-ApiEndpoint -Times 5 -Exactly
         }
 
         It 'emits a Warning message when recovering a stale branch' {
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig -ForceRecreate | Out-Null
+            Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
+        }
+    }
+}
+
+# =============================================================================
+Describe 'New-GitBranchFromExisting - branch exists, skip by default' {
+
+    BeforeAll {
+        . "$PSScriptRoot\..\private\GitFunctions.ps1"
+        Mock Write-Message { }
+        Mock New-RequestHeader { return @{ Authorization = 'Bearer pat' } }
+        Mock APIReturnedError { return "mocked-error" }
+    }
+
+    Context 'GitHub provider - branch already exists, no -ForceRecreate' {
+        BeforeEach {
+            $ghConfig = New-AzdoConfig `
+                -AzdoBaseUrl      'https://dev.azure.com' `
+                -OrganizationName 'ghOrg' `
+                -ProjectName      'testProject' `
+                -RepositoryName   'ghRepo' `
+                -SourceBranchName 'main' `
+                -GitProviderType  'GitHub' `
+                -Pat              'ghpat'
+
+            $callSequence = [System.Collections.Generic.List[int]]::new()
+            Mock Invoke-ApiEndpoint {
+                $callSequence.Add(1)
+                $n = $callSequence.Count
+                if ($n -eq 1) {
+                    $content = '{"object":{"sha":"abc123"}}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                # POST create - already exists
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 422; Content = ''; Message = 'Reference already exists'; Body = '' }; isException = $false }
+            }
+        }
+
+        It 'skips delete and retry - only 2 API calls' {
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig | Out-Null
+            Should -Invoke Invoke-ApiEndpoint -Times 2 -Exactly
+        }
+
+        It 'emits a Warning message when skipping' {
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig | Out-Null
+            Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
+        }
+    }
+
+    Context 'AzureDevOps provider - branch already exists, no -ForceRecreate' {
+        BeforeEach {
+            $testConfig = New-AzdoConfig `
+                -AzdoBaseUrl         'https://dev.azure.com' `
+                -OrganizationName    'testOrg' `
+                -ProjectName         'testProject' `
+                -RepositoryName      'testRepo' `
+                -SourceBranchName    'main' `
+                -DevOpsRequestHeader @{ Authorization = 'Bearer test' }
+
+            $callSequence = [System.Collections.Generic.List[int]]::new()
+            Mock Invoke-ApiEndpoint {
+                $callSequence.Add(1)
+                $n = $callSequence.Count
+                if ($n -eq 1) {
+                    $content = '{"value":[{"name":"refs/heads/main","objectid":"abc123"}]}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                # GET target branch - exists
+                $content = '{"value":[{"name":"refs/heads/workspace/ws_dev","objectId":"oldsha"}]}'
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+            }
+        }
+
+        It 'skips delete and create - only 2 API calls' {
+            New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig | Out-Null
+            Should -Invoke Invoke-ApiEndpoint -Times 2 -Exactly
+        }
+
+        It 'emits a Warning message when skipping' {
             New-GitBranchFromExisting -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig | Out-Null
             Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
         }

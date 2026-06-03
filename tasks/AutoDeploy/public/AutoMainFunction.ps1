@@ -24,6 +24,8 @@ param
     [parameter(Mandatory = $false)] [String] $repositoryName,
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $useEmptyBranch = "False",
+    [parameter(Mandatory = $false)]
+    [ValidateSet("True", "False")] [String] $forceRecreateBranch = "False",
     [parameter(Mandatory = $false)] [String] $sourceBranchName = "main",
     [parameter(Mandatory = $false)] [String] $itemsGitFolder = "/fabric",
     [parameter(Mandatory = $false)] [String] $environmentList,
@@ -148,7 +150,7 @@ try {
                     if (-not (Test-DevOpsRepoPath -gitPath $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig)) {
                         throw "Path '$($script:itemsGitFolder)' not found in source branch '$($gitBranchAzdoConfig.SourceBranchName)'. Add this folder to the source branch before running the deployment."
                     }
-                    New-GitBranchFromExisting -newBranchName $newBranchName -AzdoConfig $gitBranchAzdoConfig | Out-Null
+                    New-GitBranchFromExisting -newBranchName $newBranchName -AzdoConfig $gitBranchAzdoConfig -ForceRecreate:([Convert]::ToBoolean($script:forceRecreateBranch)) | Out-Null
                 }
                 Write-Message "Action" "Connecting workspace $($workspaceFQN) ($($workspaceId)) to branch $($newBranchName)"
                 $gitConfig = New-GitConfig `

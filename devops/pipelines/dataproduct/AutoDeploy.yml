@@ -61,6 +61,11 @@ parameters:
   type: boolean
   default: False
 
+- name: forceRecreateBranch
+  displayName: "Force re-create branch?"
+  type: boolean
+  default: False
+
 - name: sourceBranchName
   displayName: "Source Branch Name"
   type: string
@@ -112,6 +117,7 @@ stages:
                     sourceBranchName: ${{ parameters.sourceBranchName }}
                     itemsGitFolder: ${{ parameters.itemsGitFolder }}
                     useEmptyBranch: ${{ parameters.useEmptyBranch }}
+                    forceRecreateBranch: ${{ parameters.forceRecreateBranch }}
                     enableDiagnostics: ${{ parameters.enableDiagnostics }}
 
   - ${{ if eq(parameters.createDeploymentPipeline, true) }}:

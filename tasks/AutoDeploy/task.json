@@ -13,7 +13,7 @@
     "version": {
         "Major": 2,
         "Minor": 0,
-        "Patch": 0
+        "Patch": 1
     },
     "instanceNameFormat": "FabricCatalyst Auto Deploy $(workspacePrefix)",
     "groups": [
@@ -199,6 +199,15 @@
             "defaultValue": "false",
             "groupName": "git",
             "helpMarkDown": "When enabled, creates a new empty branch in the workspace before syncing. Use for first-time deployments into a clean workspace."
+        },
+        {
+            "name": "forceRecreateBranch",
+            "type": "boolean",
+            "label": "Force Re-create Branch",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "git",
+            "helpMarkDown": "When enabled, deletes and re-creates the workspace branch if it already exists. Only use this when a branch needs to be reset (e.g. a previous run left the branch in a broken state). The default behaviour (disabled) skips branch creation and proceeds directly to connecting the workspace to Git."
         },
         {
             "name": "createDeploymentPipeline",
