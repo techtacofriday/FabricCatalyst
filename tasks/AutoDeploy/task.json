@@ -11,9 +11,9 @@
     ],
     "author": "TechTacoFriday",
     "version": {
-        "Major": 1,
-        "Minor": 6,
-        "Patch": 5
+        "Major": 2,
+        "Minor": 0,
+        "Patch": 0
     },
     "instanceNameFormat": "FabricCatalyst Auto Deploy $(workspacePrefix)",
     "groups": [
@@ -30,11 +30,6 @@
         {
             "name": "deploymentPipeline",
             "displayName": "Deployment Pipeline",
-            "isExpanded": false
-        },
-        {
-            "name": "configuration",
-            "displayName": "Configuration",
             "isExpanded": false
         },
         {
@@ -233,33 +228,6 @@
             "groupName": "deploymentPipeline",
             "visibleRule": "createDeploymentPipeline = true",
             "helpMarkDown": "Semicolon-separated list of UPNs to assign as Pipeline Admin role."
-        },
-        {
-            "name": "deploymentDirectoryPath",
-            "type": "string",
-            "label": "Deployment Directory Path",
-            "required": true,
-            "defaultValue": "devops/pipelines/fabriccatalyst/dataproduct/deployment",
-            "groupName": "configuration",
-            "helpMarkDown": "Path in the repository to the root of the deployment configuration folder. Use forward slashes."
-        },
-        {
-            "name": "fabricItemsLocation",
-            "type": "string",
-            "label": "Fabric Items Location",
-            "required": false,
-            "defaultValue": "LocalDirectory",
-            "groupName": "configuration",
-            "helpMarkDown": "Source location for Fabric item definition files. 'LocalDirectory' reads from the checked-out repository."
-        },
-        {
-            "name": "customizeDeployment",
-            "type": "boolean",
-            "label": "Customize Deployment",
-            "required": false,
-            "defaultValue": "false",
-            "groupName": "configuration",
-            "helpMarkDown": "When enabled, applies token substitution from the deployment configuration CSV before deploying items."
         },
         {
             "name": "enableDiagnostics",

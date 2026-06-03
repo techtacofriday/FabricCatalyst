@@ -13,16 +13,13 @@ $sourceBranchName         = $env:FC_SOURCEBRANCHNAME
 $gitProviderType          = if ($env:FC_GITPROVIDERTYPE) { $env:FC_GITPROVIDERTYPE } else { 'AzureDevOps' }
 $externalGitPat           = $env:FC_EXTERNALGITPAT
 $itemsGitFolder           = $env:FC_ITEMSGITFOLDER
-$deploymentDirectoryPath  = $env:FC_DEPLOYMENTDIRECTORYPATH
 $domainName               = $env:FC_DOMAINNAME
 $subDomainName            = $env:FC_SUBDOMAINNAME
 $workspaceAdminsList         = $env:FC_WORKSPACEADMINSLIST
 $workspaceContributorsList   = $env:FC_WORKSPACECONTRIBUTORSLIST
 $workspaceMembersList        = $env:FC_WORKSPACEMEMBERSLIST
 $workspaceViewersList        = $env:FC_WORKSPACEVIEWERSLIST
-$fabricItemsLocation      = if ($env:FC_FABRICITEMSLOCATION){ $env:FC_FABRICITEMSLOCATION } else { 'LocalDirectory' }
 $useEmptyBranch           = $env:FC_USEEMPTYBRANCH
-$customizeDeployment      = $env:FC_CUSTOMIZEDEPLOYMENT
 $enableDiagnostics        = $env:FC_ENABLEDIAGNOSTICS
 #endregion
 
@@ -66,9 +63,6 @@ $params = @{
     useEmptyBranch           = $useEmptyBranch
     itemsGitFolder           = $itemsGitFolder
     environmentList          = $environmentList
-    deploymentDirectoryPath  = $deploymentDirectoryPath
-    fabricItemsLocation      = $fabricItemsLocation
-    customizeDeployment      = $customizeDeployment
     workspaceAdminsList      = $workspaceAdminsList
     enableDiagnostics        = $enableDiagnostics
 }
