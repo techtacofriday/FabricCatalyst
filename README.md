@@ -71,7 +71,7 @@ In your ADO project, create an Azure Resource Manager service connection pointin
 Minimal Auto Deployment example:
 
 ```yaml
-- task: FabricCatalystAutoDeploy@1
+- task: FabricCatalystAutoDeploy@2
   displayName: Deploy Fabric workspaces
   inputs:
     azureSubscription: 'my-fabric-service-connection'
@@ -84,7 +84,6 @@ Minimal Auto Deployment example:
     repositoryName: 'fabric-items'
     sourceBranchName: 'main'
     itemsGitFolder: '/fabric/gitenabled'
-    deploymentDirectoryPath: 'devops/pipelines/fabriccatalyst/dataproduct/deployment'
 ```
 
 This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, deploys all Fabric items in tier order, and syncs workspace role assignments.
@@ -167,8 +166,6 @@ Deployment configuration lives in CSV files in your repository, organized by dat
 ```
 devops/pipelines/fabriccatalyst/dataproduct/deployment/
   <DataProduct>/
-    auto/
-      config.csv          # environment-specific values for Auto mode
     custom/
       config-dev.csv
       config-uat.csv
@@ -316,8 +313,6 @@ Each task has full inline help in the ADO pipeline editor. Key parameters per ta
 | `createDeploymentPipeline` | When true, creates a Fabric deployment pipeline |
 | `deploymentPipelineName` | Name of the deployment pipeline to create; required when `createDeploymentPipeline` is true |
 | `pipelineAdminsList` | Semicolon-separated UPNs to assign as Pipeline Admin |
-| `deploymentDirectoryPath` | Root path to deployment configuration folder in the repository |
-| `customizeDeployment` | When true, applies token substitution from the deployment CSV before deploying |
 | `enableDiagnostics` | Verbose logging for troubleshooting |
 
 **Map Deployment**
