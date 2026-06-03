@@ -2,7 +2,7 @@
 
 **Automated CI/CD and environment provisioning for Microsoft Fabric — from your Azure DevOps pipeline.**
 
-Microsoft Fabric's deployment tooling is improving, but there is still a significant gap between what Fabric gives you out of the box and what a proper DevOps workflow requires. Workspace creation, Git wiring, tiered item deployment, and environment-specific configuration all need to be stitched together manually — or not at all.
+Microsoft Fabric's deployment tooling is improving, but there is still a significant gap between what Fabric gives you out of the box and what a proper DevOps workflow requires. Workspace creation, Git wiring, role assignments, and deployment pipeline setup all need to be stitched together manually — or not at all.
 
 FabricCatalyst fills that gap. It is an Azure DevOps extension that handles the full deployment lifecycle in pipeline tasks that slot into your existing ADO workflows.
 
@@ -12,7 +12,7 @@ FabricCatalyst fills that gap. It is an Azure DevOps extension that handles the 
 
 ### FabricCatalyst - Auto Deployment
 
-Deploys Fabric items from a Git-connected workspace using branch auto-discovery. Handles tiered deployment of Lakehouses, Warehouses, Notebooks, Semantic Models, Data Pipelines, and Reports in dependency order.
+Provisions Fabric workspaces, connects them to their Git branches using Fabric's built-in Git integration, assigns workspace roles, and optionally creates a Fabric deployment pipeline. Item content flows from Git through Fabric's native `updateFromGit` mechanism; content promotion between environments flows through Fabric's native deployment pipelines.
 
 Use this when your team follows a DevOps-first Fabric workflow with Git-connected workspaces across dev, test, and prod environments.
 
@@ -38,11 +38,14 @@ Use this when a workspace needs a Git sync followed by connection binding or not
 
 ## How it works
 
-**Auto Deployment** handles **tiered deployment** automatically — items deploy in dependency order so you never hit a "lakehouse not found" error mid-run:
+**Auto Deployment** provisions workspaces and wires them to Fabric's native capabilities:
 
-- **Tier 1** — Lakehouse, Warehouse, SQL Database
-- **Tier 2** — Notebook, Semantic Model
-- **Tier 3** — Data Pipeline, Report
+1. Creates (or updates) workspaces named by prefix and environment code, assigns them to a capacity and optionally a domain.
+2. For Git-enabled environments, creates a workspace branch in the source repository and connects the workspace to it using Fabric's built-in Git integration.
+3. Syncs roles (Admins, Contributors, Members, Viewers) against the declared lists on every run.
+4. Optionally creates a Fabric deployment pipeline so that `FabricCatalyst - Promote Stage` can advance content from dev to test to prod without touching the Fabric UI.
+
+Item deployment is handled by Fabric itself — once the workspace is Git-connected, `FabricCatalyst - Update From Git` triggers the native `updateFromGit` sync. Promotion between stages is handled by `FabricCatalyst - Promote Stage` calling the Fabric deployment pipeline API. No custom tier ordering is involved.
 
 Authentication goes through a single **Azure Resource Manager service connection** using a service principal. The extension handles token acquisition for the Fabric API, Azure DevOps API, and Microsoft Graph API from that one connection — no variable groups, no manual token management.
 
@@ -67,10 +70,10 @@ Authentication goes through a single **Azure Resource Manager service connection
     projectName: 'my-devops-project'
     repositoryName: 'my-data-product-git-repo'
     sourceBranchName: 'main'
-    itemsGitFolder: '/fabric/gitenabled'
+    itemsGitFolder: '/fabric'
 ```
 
-This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, and deploys all Fabric items in tier order. Subsequent runs are idempotent. If the workspace branch already exists the task skips branch creation and proceeds directly to connecting the workspace to Git — safe for adding new environments to an already-deployed solution. Set `forceRecreateBranch: true` only when you need to reset a branch that is preventing a Git sync.
+This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat` and connects the dev workspace to the specified Git branch. Subsequent runs are idempotent. If the workspace branch already exists the task skips branch creation and proceeds directly to connecting the workspace to Git — safe for adding new environments to an already-deployed solution. Set `forceRecreateBranch: true` only when you need to reset a branch that is preventing a Git sync.
 
 **Promote Stage** — advance items through a Fabric deployment pipeline:
 
