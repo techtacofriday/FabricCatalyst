@@ -46,7 +46,7 @@ Use this when a workspace needs a Git sync followed by connection binding or not
 
 Authentication goes through a single **Azure Resource Manager service connection** using a service principal. The extension handles token acquisition for the Fabric API, Azure DevOps API, and Microsoft Graph API from that one connection — no variable groups, no manual token management.
 
-Environment-specific configuration uses **CSV files with `#{token}#` placeholders** that get substituted at deploy time. Workspace IDs, lakehouse connection strings, and environment-specific values are all resolved from a properties catalog built at runtime.
+**Map Deployment** uses **CSV files and inline JSON with `#{token}#` placeholders** for environment-specific configuration. Workspace IDs, lakehouse connection strings, and any other environment-specific values are substituted at deploy time from a properties catalog built as items are provisioned.
 
 ---
 
@@ -55,7 +55,7 @@ Environment-specific configuration uses **CSV files with `#{token}#` placeholder
 **Auto Deployment** — provision and deploy Git-connected workspaces:
 
 ```yaml
-- task: FabricCatalystAutoDeploy@1
+- task: FabricCatalystAutoDeploy@2
   displayName: Deploy Fabric workspaces
   inputs:
     azureSubscription: 'my-devops-service-connection'
@@ -68,10 +68,9 @@ Environment-specific configuration uses **CSV files with `#{token}#` placeholder
     repositoryName: 'my-data-product-git-repo'
     sourceBranchName: 'main'
     itemsGitFolder: '/fabric/gitenabled'
-    deploymentDirectoryPath: 'devops/my-env-configuration'
 ```
 
-This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, and deploys all Fabric items in tier order. Subsequent runs are idempotent.
+This creates (or updates) workspaces named `ws_MyProduct_dev` and `ws_MyProduct_uat`, connects the dev workspace to the specified Git branch, and deploys all Fabric items in tier order. Subsequent runs are idempotent. If the workspace branch already exists the task skips branch creation and proceeds directly to connecting the workspace to Git — safe for adding new environments to an already-deployed solution. Set `forceRecreateBranch: true` only when you need to reset a branch that is preventing a Git sync.
 
 **Promote Stage** — advance items through a Fabric deployment pipeline:
 

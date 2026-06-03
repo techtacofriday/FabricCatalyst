@@ -3,4 +3,3 @@ variables:
   azdoServiceConnection: azdo-serviceconnection-arm-d
   azdoEnvironment: Default-Auto
   fabricCapacityName: "my-fabric-capapcity"
-  deploymentDirectoryPath: "devops/pipelines/dataproduct/deployment/auto"

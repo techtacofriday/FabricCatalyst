@@ -11,9 +11,9 @@
     ],
     "author": "TechTacoFriday",
     "version": {
-        "Major": 1,
-        "Minor": 6,
-        "Patch": 5
+        "Major": 2,
+        "Minor": 0,
+        "Patch": 2
     },
     "instanceNameFormat": "FabricCatalyst Auto Deploy $(workspacePrefix)",
     "groups": [
@@ -30,11 +30,6 @@
         {
             "name": "deploymentPipeline",
             "displayName": "Deployment Pipeline",
-            "isExpanded": false
-        },
-        {
-            "name": "configuration",
-            "displayName": "Configuration",
             "isExpanded": false
         },
         {
@@ -206,6 +201,15 @@
             "helpMarkDown": "When enabled, creates a new empty branch in the workspace before syncing. Use for first-time deployments into a clean workspace."
         },
         {
+            "name": "forceRecreateBranch",
+            "type": "boolean",
+            "label": "Force Re-create Branch",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "git",
+            "helpMarkDown": "When enabled, deletes and re-creates the workspace branch if it already exists. Only use this when a branch needs to be reset (e.g. a previous run left the branch in a broken state). The default behaviour (disabled) skips branch creation and proceeds directly to connecting the workspace to Git."
+        },
+        {
             "name": "createDeploymentPipeline",
             "type": "boolean",
             "label": "Create Deployment Pipeline",
@@ -233,33 +237,6 @@
             "groupName": "deploymentPipeline",
             "visibleRule": "createDeploymentPipeline = true",
             "helpMarkDown": "Semicolon-separated list of UPNs to assign as Pipeline Admin role."
-        },
-        {
-            "name": "deploymentDirectoryPath",
-            "type": "string",
-            "label": "Deployment Directory Path",
-            "required": true,
-            "defaultValue": "devops/pipelines/fabriccatalyst/dataproduct/deployment",
-            "groupName": "configuration",
-            "helpMarkDown": "Path in the repository to the root of the deployment configuration folder. Use forward slashes."
-        },
-        {
-            "name": "fabricItemsLocation",
-            "type": "string",
-            "label": "Fabric Items Location",
-            "required": false,
-            "defaultValue": "LocalDirectory",
-            "groupName": "configuration",
-            "helpMarkDown": "Source location for Fabric item definition files. 'LocalDirectory' reads from the checked-out repository."
-        },
-        {
-            "name": "customizeDeployment",
-            "type": "boolean",
-            "label": "Customize Deployment",
-            "required": false,
-            "defaultValue": "false",
-            "groupName": "configuration",
-            "helpMarkDown": "When enabled, applies token substitution from the deployment configuration CSV before deploying items."
         },
         {
             "name": "enableDiagnostics",

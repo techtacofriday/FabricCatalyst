@@ -72,7 +72,8 @@ function Remove-GitBranch {
 function New-GitBranchFromExisting {
     param (
         [parameter(Mandatory = $true)]  [String]         $newBranchName,
-        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null,
+        [parameter(Mandatory = $false)] [Switch]         $ForceRecreate
     )
     $azdoBase      = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }      else { $script:azdoBaseUrl }
     $org           = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName } else { $script:organizationName }
@@ -94,7 +95,11 @@ function New-GitBranchFromExisting {
             $jsonBody = "{`"ref`":`"refs/heads/$($newBranchName)`",`"sha`":`"$($sha)`"}"
             $createResponse = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs" -method "POST" -body $jsonBody
             if ($createResponse.responseObject.StatusCode -eq 422) {
-                Write-Message "Warning" "Branch $($newBranchName) already existed from a previous failed run - deleting and recreating."
+                if (-not $ForceRecreate) {
+                    Write-Message "Warning" "Branch $($newBranchName) already exists - skipping creation and proceeding to Git connection."
+                    return $repo
+                }
+                Write-Message "Warning" "Branch $($newBranchName) already exists - force-recreating as requested."
                 Remove-GitBranch -branchName $newBranchName -AzdoConfig $AzdoConfig
                 $createResponse = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs" -method "POST" -body $jsonBody
             }
@@ -132,7 +137,11 @@ function New-GitBranchFromExisting {
             if ($targetRefResponse.responseObject.StatusCode -eq 200) {
                 $existingRef = ($targetRefResponse.responseObject.Content | ConvertFrom-Json).value | Where-Object { $_.name -eq "refs/heads/$($newBranchName)" }
                 if ($null -ne $existingRef) {
-                    Write-Message "Warning" "Branch $($newBranchName) already existed from a previous failed run - deleting and recreating."
+                    if (-not $ForceRecreate) {
+                        Write-Message "Warning" "Branch $($newBranchName) already exists - skipping creation and proceeding to Git connection."
+                        return
+                    }
+                    Write-Message "Warning" "Branch $($newBranchName) already exists - force-recreating as requested."
                     Remove-GitBranch -branchName $newBranchName -AzdoConfig $AzdoConfig
                 }
             }
