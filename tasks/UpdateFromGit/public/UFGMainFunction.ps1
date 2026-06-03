@@ -143,7 +143,7 @@ try {
                 $name   = $item.displayName
                 if ($item.displayName -ne "notebookSample") {
                     Write-Message "Action" "Running notebook '$name' (id=$itemId) in folder '$($script:postDeploymentFolder)'..."
-                    Invoke-FabricNotebook -workspaceId $workspace.id -notebookItemId $itemId -whatIf $whatIf | Out-Null
+                    Invoke-FabricNotebook -workspaceId $workspace.id -notebookItemId $itemId | Out-Null
                 }
             }
             Write-Message "Info" "All notebooks in folder '$($script:postDeploymentFolder)' completed successfully."

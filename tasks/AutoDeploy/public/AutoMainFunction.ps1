@@ -24,6 +24,8 @@ param
     [parameter(Mandatory = $false)] [String] $repositoryName,
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $useEmptyBranch = "False",
+    [parameter(Mandatory = $false)]
+    [ValidateSet("True", "False")] [String] $forceRecreateBranch = "False",
     [parameter(Mandatory = $false)] [String] $sourceBranchName = "main",
     [parameter(Mandatory = $false)] [String] $itemsGitFolder = "/fabric",
     [parameter(Mandatory = $false)] [String] $environmentList,
@@ -31,11 +33,6 @@ param
     [parameter(Mandatory = $false)] [String] $workspaceContributorsList, #semicolon-separated UPNs
     [parameter(Mandatory = $false)] [String] $workspaceMembersList,      #semicolon-separated UPNs
     [parameter(Mandatory = $false)] [String] $workspaceViewersList,      #semicolon-separated UPNs
-    [parameter(Mandatory = $false)]
-    [ValidateSet("True", "False")] [String] $customizeDeployment = "False",
-    [parameter(Mandatory = $false)] [String] $deploymentDirectoryPath,
-    [ValidateSet("LocalDirectory")]
-    [parameter(Mandatory = $false)] [String] $fabricItemsLocation = "LocalDirectory",
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
     [parameter(Mandatory = $false)] [Bool] $developerView = $false,
@@ -65,170 +62,6 @@ $private = if (Test-Path "$PSScriptRoot\..\private") { "$PSScriptRoot\..\private
 . "$private\ConnectionFunctions.ps1"
 
 
-function Invoke-FabricItemCustomization() {
-    param (
-        [parameter(Mandatory = $true)]  [String]         $workspaceFQN,
-        [parameter(Mandatory = $true)]  [String]         $workspaceId,
-        [parameter(Mandatory = $true)]  [PSCustomObject] $fabricItemsDiscovered,
-        [parameter(Mandatory = $true)]  [String]         $configBranchName,
-        [parameter(Mandatory = $true)]  [String]         $configFilePath,
-        [parameter(Mandatory = $true)]  [String]         $enableDiagnostics,
-        [parameter(Mandatory = $true)]  [PSCustomObject] $catalog,
-        [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null,
-        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
-    )
-
-    Write-Message "Info" "Selected config file $($configFilePath)."
-    $csvContent = Get-DeploymentCsvContent -configFilePath $configFilePath -branchName $configBranchName -AzdoConfig $AzdoConfig
-
-    #Deploy Tier 1 Fabric Items
-    $customFabricItemsTier = 1 #Tier 1 items are those that do not have dependencies to other items
-    $tierCustomFabricItems = $fabricItemsDiscovered | Where-Object {($_.tier) -eq $customFabricItemsTier} | Sort-Object -Property priority #-Ascending
-    foreach ($tierCustomFabricItem in $tierCustomFabricItems) {
-        if ($tierCustomFabricItem.type -eq "lakehouse") {
-            $lakehouseName = $tierCustomFabricItem.name
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name
-            #Get the Connection string id from the Item
-            $lakehouseConnStr = Get-LakehouseSqlEndpoint -lakehouseId $tierCustomFabricItem.id -workspaceId $workspaceId -Context $Context
-            $MConnectionExpresion = "let database = Sql.Database(`"`"$($lakehouseConnStr)`"`",`"`"$($lakehouseName)`"`") in database"
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).MConnectionExpresion" -Value $MConnectionExpresion
-        }
-        elseif ($tierCustomFabricItem.type -eq "warehouse") {
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name
-            #Get the SqlCnnString from the Item
-            $warehouse = Get-Warehouse -warehouseId $tierCustomFabricItem.id -workspaceId $workspaceId -Context $Context
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).CnnString" -Value $warehouse.properties.connectionString
-        }
-        <# THE SQL DATABASE EXPERIENCE IS STILL IN PRIVATE PREVIEW #>
-        elseif ($tierCustomFabricItem.type -eq "sqldatabase") {
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name
-            #Get the SqlCnnString from the Item
-            $sqldatabase = Get-SqlDatabase -sqldatabaseId $tierCustomFabricItem.id -workspaceId $workspaceId -Context $Context
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).CnnString" -Value $sqldatabase.properties.connectionString
-        }
-    }
-
-    #Detokenize config file with tier 1 PropertiesCatalog
-    $newCsvFilePath = Invoke-DetokenizeConfigFile -csvContent $csvContent -customFabricItemsTier $customFabricItemsTier -catalog $catalog -deploymentConfigFileName (Split-Path -Leaf $configFilePath)
-    #Deploy Tier 2 Fabric Items
-    $customFabricItemsTier++ #Tier 1 items are those with direct dependency to Tier 1
-    $tierCustomFabricItems = $fabricItemsDiscovered | Where-Object {($_.tier) -eq $customFabricItemsTier} |  Sort-Object -Property priority #-Ascending
-
-    foreach ($tierCustomFabricItem in $tierCustomFabricItems) {
-        if ($tierCustomFabricItem.type -eq "notebook") {
-            Write-Message "Action" "Preparing Notebook $($tierCustomFabricItem.name) Definition Parts"
-            $notebookDefinitionParts = New-ItemDefinitionParts `
-                -itemName $tierCustomFabricItem.name `
-                -itemType $tierCustomFabricItem.type `
-                -csvFilePath $newCsvFilePath `
-                -dfnDirectory $tierCustomFabricItem.directory `
-                -dfnParts $tierCustomFabricItem.dfnParts `
-                -enableDiagnostics $enableDiagnostics
-
-            if ($null -ne $notebookDefinitionParts) {
-                Write-Message "Action" "Updating Notebook $($tierCustomFabricItem.name)"
-                New-FabricItem `
-                    -itemName $tierCustomFabricItem.name `
-                    -itemType $tierCustomFabricItem.type `
-                    -itemDefinitionParts $notebookDefinitionParts  `
-                    -partsMandatory $tierCustomFabricItem.partsMandatory `
-                    -workspaceId $workspaceId `
-                    -updateDefinition $true `
-                    -Context $Context | Out-Null
-            }
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id -Force
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name -Force
-        }
-        elseif ($tierCustomFabricItem.type -eq "semanticmodel") {
-            Write-Message "Action" "Preparing Semantic Model $($tierCustomFabricItem.name) Definition Parts"
-            $semanticModelDefinitionParts = New-ItemDefinitionParts `
-                -itemName $tierCustomFabricItem.name `
-                -itemType $tierCustomFabricItem.type `
-                -csvFilePath $newCsvFilePath `
-                -dfnDirectory $tierCustomFabricItem.directory `
-                -dfnParts $tierCustomFabricItem.dfnParts `
-                -enableDiagnostics $enableDiagnostics
-
-            if ($null -ne $semanticModelDefinitionParts) {
-                Write-Message "Action" "Updating Semantic Model $($tierCustomFabricItem.name)"
-                New-FabricItem `
-                    -itemName $tierCustomFabricItem.name `
-                    -itemType $tierCustomFabricItem.type `
-                    -itemDefinitionParts $semanticModelDefinitionParts  `
-                    -partsMandatory $tierCustomFabricItem.partsMandatory `
-                    -workspaceId $workspaceId `
-                    -updateDefinition $true `
-                    -Context $Context | Out-Null
-            }
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id -Force
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name -Force
-            $ConnectionString = "Data Source=powerbi://api.powerbi.com/v1.0/myorg/$($workspaceFQN);Initial Catalog=$($tierCustomFabricItem.name);Integrated Security=ClaimsToken"
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).CnnString" -Value $ConnectionString -Force
-            $FlattenedJson = "{`"`"byConnection`"`":{`"`"connectionString`"`":`"`"$($ConnectionString)`"`",`"`"connectionType`"`":`"`"pbiServiceXmlaStyleLive`"`",`"`"name`"`":`"`"EntityDataSource`"`",`"`"pbiModelDatabaseName`"`":`"`"$($tierCustomFabricItem.id)`"`",`"`"pbiModelVirtualServerName`"`":`"`"sobe_wowvirtualserver`"`",`"`"pbiServiceModelId`"`":null},`"`"byPath`"`":null}"
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).DatasetReference" -Value $FlattenedJson -Force
-        }
-        elseif ($tierCustomFabricItem.type -eq "datapipeline") {
-            Write-Message "Action" "Preparing Data Pipeline $($tierCustomFabricItem.name) Definition Parts"
-            $dataPipelineDefinitionParts = New-ItemDefinitionParts `
-                    -itemName $tierCustomFabricItem.name `
-                    -itemType $tierCustomFabricItem.type `
-                    -csvFilePath $newCsvFilePath `
-                    -dfnDirectory $tierCustomFabricItem.directory `
-                    -dfnParts $tierCustomFabricItem.dfnParts `
-                    -enableDiagnostics $enableDiagnostics
-
-            if ($null -ne $dataPipelineDefinitionParts) {
-                Write-Message "Action" "Updating Data Pipeline $($tierCustomFabricItem.name)"
-                New-FabricItem `
-                    -itemName $tierCustomFabricItem.name `
-                    -itemType $tierCustomFabricItem.type `
-                    -itemDefinitionParts $dataPipelineDefinitionParts  `
-                    -partsMandatory $tierCustomFabricItem.partsMandatory `
-                    -workspaceId $workspaceId `
-                    -updateDefinition $true `
-                    -Context $Context | Out-Null
-            }
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id -Force
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name -Force
-        }
-    }
-
-    #Detokenize config file with tier 2 PropertiesCatalog
-    $newCsvFilePath = Invoke-DetokenizeConfigFile -csvContent $csvContent -customFabricItemsTier $customFabricItemsTier -catalog $catalog -deploymentConfigFileName (Split-Path -Leaf $configFilePath)
-    #Deploy Tier 3 Fabric Items
-    $customFabricItemsTier++
-    $tierCustomFabricItems = $fabricItemsDiscovered | Where-Object {($_.tier) -eq $customFabricItemsTier} |  Sort-Object -Property priority #-Ascending
-    foreach ($tierCustomFabricItem in $tierCustomFabricItems) {
-        if ($tierCustomFabricItem.type -eq "report") {
-            Write-Message "Action" "Preparing Report $($tierCustomFabricItem.name) Definition Parts"
-            $reportDefinitionParts = New-ItemDefinitionParts `
-                -itemName $tierCustomFabricItem.name `
-                -itemType $tierCustomFabricItem.type `
-                -csvFilePath $newCsvFilePath `
-                -dfnDirectory $tierCustomFabricItem.directory `
-                -dfnParts $tierCustomFabricItem.dfnParts `
-                -enableDiagnostics $enableDiagnostics
-
-            if ($null -ne $reportDefinitionParts) {
-                Write-Message "Action" "Updating Report $($tierCustomFabricItem.name)"
-                New-FabricItem `
-                    -itemName $tierCustomFabricItem.name `
-                    -itemType $tierCustomFabricItem.type `
-                    -itemDefinitionParts $reportDefinitionParts  `
-                    -partsMandatory $tierCustomFabricItem.partsMandatory `
-                    -workspaceId $workspaceId `
-                    -updateDefinition $true `
-                    -Context $Context | Out-Null
-            }
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id -Force
-            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name -Force
-        }
-    }
-}
-
 try {
     Write-Message "Info" "Powershell version : $($PSVersionTable.PSVersion)"
     # Get all defined parameters in the script
@@ -246,19 +79,6 @@ try {
     if ($script:workspacePrefix -notmatch '^[A-Za-z0-9-]+$') {
         throw "The value for workspacePrefix contains invalid characters. Only letters, numbers, and dashes are allowed."
     }
-    if ([Convert]::ToBoolean($script:customizeDeployment)) {
-        $missingParams = @()
-        if ([string]::IsNullOrWhiteSpace($script:deploymentDirectoryPath))                                                                         { $missingParams += 'deploymentDirectoryPath' }
-        if ([string]::IsNullOrWhiteSpace($script:organizationName))                                                                                { $missingParams += 'organizationName' }
-        if ($script:gitProviderType -eq 'AzureDevOps' -and [string]::IsNullOrWhiteSpace($script:projectName))                                     { $missingParams += 'projectName' }
-        if ([string]::IsNullOrWhiteSpace($script:repositoryName))                                                                                  { $missingParams += 'repositoryName' }
-        if ([string]::IsNullOrWhiteSpace($script:sourceBranchName))                                                                                { $missingParams += 'sourceBranchName' }
-        if ($script:gitProviderType -eq 'GitHub' -and [string]::IsNullOrWhiteSpace($script:externalGitPat))                                       { $missingParams += 'externalGitPat' }
-        if ($missingParams.Count -gt 0) {
-            throw "customizeDeployment is 'True' but the following required parameters are missing or empty: $($missingParams -join ', ')"
-        }
-    }
-
     $availableCapacities = Get-FabricCapacities
     $capacityId = ($availableCapacities | Where-Object { $_.displayName -eq $script:capacityName -and $_.state -eq 'Active' }).id
     if($null -eq $capacityId) {
@@ -308,8 +128,6 @@ try {
             Add-WorkspaceUsers -workspaceId $workspaceId -upnList $script:workspaceMembersList      -workspaceRole "Member"
             Add-WorkspaceUsers -workspaceId $workspaceId -upnList $script:workspaceViewersList      -workspaceRole "Viewer"
 
-            $configBranchName = $script:sourceBranchName
-
             if([int]$environment.gitEnabled -eq 1) {
                 $script:fabricGitConnectionId = (Get-FabricConnection -connectionName $script:fabricGitConnectionName).id
                 if ([string]::IsNullOrWhiteSpace($script:fabricGitConnectionId)) {
@@ -332,7 +150,7 @@ try {
                     if (-not (Test-DevOpsRepoPath -gitPath $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig)) {
                         throw "Path '$($script:itemsGitFolder)' not found in source branch '$($gitBranchAzdoConfig.SourceBranchName)'. Add this folder to the source branch before running the deployment."
                     }
-                    New-GitBranchFromExisting -newBranchName $newBranchName -AzdoConfig $gitBranchAzdoConfig | Out-Null
+                    New-GitBranchFromExisting -newBranchName $newBranchName -AzdoConfig $gitBranchAzdoConfig -ForceRecreate:([Convert]::ToBoolean($script:forceRecreateBranch)) | Out-Null
                 }
                 Write-Message "Action" "Connecting workspace $($workspaceFQN) ($($workspaceId)) to branch $($newBranchName)"
                 $gitConfig = New-GitConfig `
@@ -344,38 +162,6 @@ try {
                     -ItemsGitFolder        $script:itemsGitFolder `
                     -FabricGitConnectionId $script:fabricGitConnectionId
                 Connect-WorkspaceToGit -workspaceId $workspaceId -GitConfig $gitConfig
-            }
-
-            if([Convert]::ToBoolean($script:customizeDeployment)) {
-                $configFilePath = "{0}/config-{1}.csv" -f $script:deploymentDirectoryPath, $environment.Code
-                $azdoConfig = New-AzdoConfig `
-                    -AzdoBaseUrl         $script:azdoBaseUrl `
-                    -OrganizationName    $script:organizationName `
-                    -ProjectName         $script:projectName `
-                    -RepositoryName      $script:repositoryName `
-                    -SourceBranchName    $configBranchName `
-                    -DevOpsRequestHeader $script:devOpsRequestHeader `
-                    -GitProviderType     $script:gitProviderType `
-                    -Pat                 $script:externalGitPat
-                if (-not (Test-DevOpsRepoPath -gitPath $configFilePath -branchName $configBranchName -AzdoConfig $azdoConfig)) {
-                    throw "Customization config file '$configFilePath' not found in the repository. Stopping deployment for '$($workspaceFQN)'."
-                }
-                Write-Message "Action" "Customizing deployment on $($workspaceFQN)"
-                Write-Message "Action" "Scanning workspace $($script:itemsDirectoryPath)"
-                $fabricItemsDiscovered = ScanWorkspaceForSupportedItems -workspaceId $workspaceId
-                if ($null -ne $fabricItemsDiscovered) {
-                    $script:fabricItemsPropertiesCatalog = [PSCustomObject]@{}
-                    $script:fabricItemsPropertiesCatalog | Add-Member -MemberType NoteProperty -Name "HomeWorkspace.Id" -Value $workspaceId
-                    Invoke-FabricItemCustomization `
-                        -workspaceFQN $workspaceFQN `
-                        -workspaceId $workspaceId `
-                        -fabricItemsDiscovered $fabricItemsDiscovered `
-                        -configBranchName $configBranchName `
-                        -configFilePath $configFilePath `
-                        -enableDiagnostics $script:enableDiagnostics `
-                        -catalog $script:fabricItemsPropertiesCatalog `
-                        -AzdoConfig $azdoConfig
-                }
             }
         }
     }

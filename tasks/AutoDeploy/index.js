@@ -25,17 +25,16 @@ function run() {
             'workspacePrefix', 'capacityName', 'environmentList',
             'fabricGitConnectionName', 'organizationName', 'projectName',
             'repositoryName', 'sourceBranchName', 'gitProviderType', 'externalGitPat',
-            'itemsGitFolder', 'deploymentDirectoryPath', 'domainName', 'subDomainName',
+            'itemsGitFolder', 'domainName', 'subDomainName',
             'workspaceAdminsList', 'deploymentPipelineName', 'pipelineAdminsList',
-            'fabricItemsLocation',
         ]) {
             env[`FC_${name.toUpperCase()}`] = tl.getInput(name, false) || '';
         }
 
         // Boolean inputs (PowerShell expects 'True'/'False')
         for (const name of [
-            'useEmptyBranch', 'createDeploymentPipeline',
-            'customizeDeployment', 'enableDiagnostics',
+            'useEmptyBranch', 'forceRecreateBranch', 'createDeploymentPipeline',
+            'enableDiagnostics',
         ]) {
             env[`FC_${name.toUpperCase()}`] = tl.getBoolInput(name, false) ? 'True' : 'False';
         }
