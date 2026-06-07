@@ -74,23 +74,24 @@ function New-FabricWorkspace {
     param (
         [parameter(Mandatory = $true)]  [String]         $workspaceName,
         [parameter(Mandatory = $true)]  [String]         $capacityId,
+        [parameter(Mandatory = $false)] [bool]           $ProvisionIdentity = $true,
         [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
     )
 
     $workspace = (Get-Workspaces -workspaceName $workspaceName -Context $Context | Select-Object -First 1)
+    $workspaceAlreadyExisted = $null -ne $workspace
 
-    if($null -eq $workspace) {
+    if (-not $workspaceAlreadyExisted) {
         Write-Message "Action" "Creating new workspace $($workspaceName)."
         $requestBody = @{
             displayName = $workspaceName
-            capacityId = $capacityId
+            capacityId  = $capacityId
         } | ConvertTo-Json -Depth 4
         $endPoint = "/workspaces" #https://learn.microsoft.com/en-us/rest/api/fabric/core/workspaces/create-workspace
         $workspaceResponse = Invoke-ApiEndpoint -endPoint $endPoint -method "POST" -body $requestBody -Context $Context
         if ($workspaceResponse.responseObject.StatusCode -eq 201) {
             $workspace = $workspaceResponse.responseObject.Content | ConvertFrom-Json
             Write-Message "Info" "Workspace $workspaceName($($workspace.id)) was created."
-            return $workspace.id
         }
         else {
             if (@(409) -contains $workspaceResponse.responseObject.StatusCode) {
@@ -104,8 +105,43 @@ function New-FabricWorkspace {
     else {
         If ($workspace.capacityId -eq $capacityId) { Write-Message "Info" "Workspace $workspaceName ($($workspace.id)) was found." }
         else { Write-Message "Warning" "Workspace $workspaceName ($($workspace.id)) was found in a different capacity." }
-        return $workspace.id
     }
+
+    if ($ProvisionIdentity) {
+        # The Admin list API does not return workspaceIdentity; fetch the individual workspace to check.
+        # A newly created workspace never has an identity so the extra call is only needed for existing ones.
+        if ($workspaceAlreadyExisted) {
+            $getResp = Invoke-ApiEndpoint -endPoint "/workspaces/$($workspace.id)" -Context $Context #https://learn.microsoft.com/en-us/rest/api/fabric/core/workspaces/get-workspace
+            if ($getResp.isException) { throw (APIReturnedError -apiCallResponse $getResp -intendedAction "get workspace details") }
+            $workspace = $getResp.responseObject.Content | ConvertFrom-Json
+        }
+
+        $hasIdentity = $null -ne $workspace.workspaceIdentity -and
+                       -not [string]::IsNullOrWhiteSpace($workspace.workspaceIdentity.servicePrincipalId)
+        if (-not $hasIdentity) {
+            Write-Message "Action" "Provisioning identity for workspace $($workspace.id)."
+            $endPoint = "/workspaces/$($workspace.id)/provisionIdentity" #https://learn.microsoft.com/en-us/rest/api/fabric/core/workspaces/provision-identity
+            $identityResponse = Invoke-ApiEndpoint -endPoint $endPoint -method "POST" -Context $Context
+            if ($identityResponse.responseObject.StatusCode -eq 202) {
+                $operationId   = [string]($identityResponse.responseObject.Headers.'x-ms-operation-id' | Select-Object -First 1)
+                $retryHeader   = [string]($identityResponse.responseObject.Headers.'Retry-After'        | Select-Object -First 1)
+                $retryInterval = if ($retryHeader -match '^\d+$') { [int]$retryHeader } else { 5 }
+                Wait-FabricLRO -operationId $operationId -retryInterval $retryInterval -Context $Context | Out-Null
+                Write-Message "Info" "Identity provisioned for workspace $($workspace.id)."
+            }
+            elseif ($identityResponse.responseObject.StatusCode -eq 200) {
+                Write-Message "Info" "Identity provisioned for workspace $($workspace.id)."
+            }
+            elseif ($identityResponse.isException) {
+                throw (APIReturnedError -apiCallResponse $identityResponse -intendedAction "provision workspace identity")
+            }
+        }
+        else {
+            Write-Message "Info" "Workspace $($workspace.id) already has an identity, skipping provisioning."
+        }
+    }
+
+    return $workspace.id
 
 }
 
