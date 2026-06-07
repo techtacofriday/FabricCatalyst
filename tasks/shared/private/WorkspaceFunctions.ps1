@@ -79,8 +79,9 @@ function New-FabricWorkspace {
     )
 
     $workspace = (Get-Workspaces -workspaceName $workspaceName -Context $Context | Select-Object -First 1)
+    $workspaceAlreadyExisted = $null -ne $workspace
 
-    if ($null -eq $workspace) {
+    if (-not $workspaceAlreadyExisted) {
         Write-Message "Action" "Creating new workspace $($workspaceName)."
         $requestBody = @{
             displayName = $workspaceName
@@ -107,6 +108,14 @@ function New-FabricWorkspace {
     }
 
     if ($ProvisionIdentity) {
+        # The Admin list API does not return workspaceIdentity; fetch the individual workspace to check.
+        # A newly created workspace never has an identity so the extra call is only needed for existing ones.
+        if ($workspaceAlreadyExisted) {
+            $getResp = Invoke-ApiEndpoint -endPoint "/workspaces/$($workspace.id)" -Context $Context #https://learn.microsoft.com/en-us/rest/api/fabric/core/workspaces/get-workspace
+            if ($getResp.isException) { throw (APIReturnedError -apiCallResponse $getResp -intendedAction "get workspace details") }
+            $workspace = $getResp.responseObject.Content | ConvertFrom-Json
+        }
+
         $hasIdentity = $null -ne $workspace.workspaceIdentity -and
                        -not [string]::IsNullOrWhiteSpace($workspace.workspaceIdentity.servicePrincipalId)
         if (-not $hasIdentity) {
