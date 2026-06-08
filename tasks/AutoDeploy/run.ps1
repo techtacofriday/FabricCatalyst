@@ -21,6 +21,7 @@ $workspaceMembersList        = $env:FC_WORKSPACEMEMBERSLIST
 $workspaceViewersList        = $env:FC_WORKSPACEVIEWERSLIST
 $useEmptyBranch           = $env:FC_USEEMPTYBRANCH
 $forceRecreateBranch      = $env:FC_FORCERECREATEBRANCH
+$provisionIdentity        = $env:FC_PROVISIONIDENTITY
 $enableDiagnostics        = $env:FC_ENABLEDIAGNOSTICS
 #endregion
 
@@ -63,6 +64,7 @@ $params = @{
     externalGitPat           = $externalGitPat
     useEmptyBranch           = $useEmptyBranch
     forceRecreateBranch      = $forceRecreateBranch
+    provisionIdentity        = $provisionIdentity
     itemsGitFolder           = $itemsGitFolder
     environmentList          = $environmentList
     workspaceAdminsList      = $workspaceAdminsList
