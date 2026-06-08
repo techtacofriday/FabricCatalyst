@@ -315,6 +315,7 @@ Each task has full inline help in the ADO pipeline editor. Key parameters per ta
 | `createDeploymentPipeline` | When true, creates a Fabric deployment pipeline |
 | `deploymentPipelineName` | Name of the deployment pipeline to create; required when `createDeploymentPipeline` is true |
 | `pipelineAdminsList` | Semicolon-separated UPNs to assign as Pipeline Admin |
+| `provisionIdentity` | When true (default), provisions a managed identity for each workspace after creation. Set to false if the service principal lacks identity provisioning permissions. |
 | `enableDiagnostics` | Verbose logging for troubleshooting |
 
 **Map Deployment**

@@ -34,6 +34,8 @@ param
     [parameter(Mandatory = $false)] [String] $workspaceMembersList,      #semicolon-separated UPNs
     [parameter(Mandatory = $false)] [String] $workspaceViewersList,      #semicolon-separated UPNs
     [parameter(Mandatory = $false)]
+    [ValidateSet("True", "False")] [String] $provisionIdentity = "True",
+    [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
     [parameter(Mandatory = $false)] [Bool] $developerView = $false,
     # Local-run auth — omit when running inside an ADO pipeline (AzurePowerShell@5 handles auth)
@@ -118,7 +120,7 @@ try {
         foreach ($environment in $environments) {
             $workspaceFQN = "ws_{0}_{1}" -f $script:workspacePrefix, $environment.Code #$envCode
             Write-Message "Action" "Creating workspace $($workspaceFQN) in capacity $($script:capacityName)"
-            $workspaceId = New-FabricWorkspace -workspaceName $workspaceFQN -capacityId $capacityId
+            $workspaceId = New-FabricWorkspace -workspaceName $workspaceFQN -capacityId $capacityId -ProvisionIdentity ([Convert]::ToBoolean($script:provisionIdentity))
             If (![String]::IsNullOrWhiteSpace($domainId)) {
                 Add-WorkspaceToDomain -domainId $domainId -workspaceId $workspaceId | Out-Null
             }
