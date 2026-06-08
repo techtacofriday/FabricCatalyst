@@ -535,3 +535,167 @@ function Get-FabricItemDefinition {
     }
     return $itemDefinition
 }
+
+function Invoke-FabricItemCustomization() {
+    param (
+        [parameter(Mandatory = $true)]  [String]         $workspaceFQN,
+        [parameter(Mandatory = $true)]  [String]         $workspaceId,
+        [parameter(Mandatory = $true)]  [PSCustomObject] $fabricItemsDiscovered,
+        [parameter(Mandatory = $true)]  [String]         $configBranchName,
+        [parameter(Mandatory = $true)]  [String]         $configFilePath,
+        [parameter(Mandatory = $true)]  [String]         $enableDiagnostics,
+        [parameter(Mandatory = $true)]  [PSCustomObject] $catalog,
+        [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null,
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+    )
+
+    Write-Message "Info" "Selected config file $($configFilePath)."
+    $csvContent = Get-DeploymentCsvContent -configFilePath $configFilePath -branchName $configBranchName -AzdoConfig $AzdoConfig
+
+    #Deploy Tier 1 Fabric Items
+    $customFabricItemsTier = 1 #Tier 1 items are those that do not have dependencies to other items
+    $tierCustomFabricItems = $fabricItemsDiscovered | Where-Object {($_.tier) -eq $customFabricItemsTier} | Sort-Object -Property priority #-Ascending
+    foreach ($tierCustomFabricItem in $tierCustomFabricItems) {
+        if ($tierCustomFabricItem.type -eq "lakehouse") {
+            $lakehouseName = $tierCustomFabricItem.name
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name
+            #Get the Connection string id from the Item
+            $lakehouseConnStr = Get-LakehouseSqlEndpoint -lakehouseId $tierCustomFabricItem.id -workspaceId $workspaceId -Context $Context
+            $MConnectionExpresion = "let database = Sql.Database(`"`"$($lakehouseConnStr)`"`",`"`"$($lakehouseName)`"`") in database"
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).MConnectionExpresion" -Value $MConnectionExpresion
+        }
+        elseif ($tierCustomFabricItem.type -eq "warehouse") {
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name
+            #Get the SqlCnnString from the Item
+            $warehouse = Get-Warehouse -warehouseId $tierCustomFabricItem.id -workspaceId $workspaceId -Context $Context
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).CnnString" -Value $warehouse.properties.connectionString
+        }
+        <# THE SQL DATABASE EXPERIENCE IS STILL IN PRIVATE PREVIEW #>
+        elseif ($tierCustomFabricItem.type -eq "sqldatabase") {
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name
+            #Get the SqlCnnString from the Item
+            $sqldatabase = Get-SqlDatabase -sqldatabaseId $tierCustomFabricItem.id -workspaceId $workspaceId -Context $Context
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).CnnString" -Value $sqldatabase.properties.connectionString
+        }
+    }
+
+    #Detokenize config file with tier 1 PropertiesCatalog
+    $newCsvFilePath = Invoke-DetokenizeConfigFile -csvContent $csvContent -customFabricItemsTier $customFabricItemsTier -catalog $catalog -deploymentConfigFileName (Split-Path -Leaf $configFilePath)
+    #Deploy Tier 2 Fabric Items
+    $customFabricItemsTier++ #Tier 1 items are those with direct dependency to Tier 1
+    $tierCustomFabricItems = $fabricItemsDiscovered | Where-Object {($_.tier) -eq $customFabricItemsTier} |  Sort-Object -Property priority #-Ascending
+
+    foreach ($tierCustomFabricItem in $tierCustomFabricItems) {
+        if ($tierCustomFabricItem.type -eq "notebook") {
+            Write-Message "Action" "Preparing Notebook $($tierCustomFabricItem.name) Definition Parts"
+            $notebookDefinitionParts = New-ItemDefinitionParts `
+                -itemName $tierCustomFabricItem.name `
+                -itemType $tierCustomFabricItem.type `
+                -csvFilePath $newCsvFilePath `
+                -dfnDirectory $tierCustomFabricItem.directory `
+                -dfnParts $tierCustomFabricItem.dfnParts `
+                -enableDiagnostics $enableDiagnostics
+
+            if ($null -ne $notebookDefinitionParts) {
+                Write-Message "Action" "Updating Notebook $($tierCustomFabricItem.name)"
+                New-FabricItem `
+                    -itemName $tierCustomFabricItem.name `
+                    -itemType $tierCustomFabricItem.type `
+                    -itemDefinitionParts $notebookDefinitionParts  `
+                    -partsMandatory $tierCustomFabricItem.partsMandatory `
+                    -workspaceId $workspaceId `
+                    -updateDefinition $true `
+                    -Context $Context | Out-Null
+            }
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id -Force
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name -Force
+        }
+        elseif ($tierCustomFabricItem.type -eq "semanticmodel") {
+            Write-Message "Action" "Preparing Semantic Model $($tierCustomFabricItem.name) Definition Parts"
+            $semanticModelDefinitionParts = New-ItemDefinitionParts `
+                -itemName $tierCustomFabricItem.name `
+                -itemType $tierCustomFabricItem.type `
+                -csvFilePath $newCsvFilePath `
+                -dfnDirectory $tierCustomFabricItem.directory `
+                -dfnParts $tierCustomFabricItem.dfnParts `
+                -enableDiagnostics $enableDiagnostics
+
+            if ($null -ne $semanticModelDefinitionParts) {
+                Write-Message "Action" "Updating Semantic Model $($tierCustomFabricItem.name)"
+                New-FabricItem `
+                    -itemName $tierCustomFabricItem.name `
+                    -itemType $tierCustomFabricItem.type `
+                    -itemDefinitionParts $semanticModelDefinitionParts  `
+                    -partsMandatory $tierCustomFabricItem.partsMandatory `
+                    -workspaceId $workspaceId `
+                    -updateDefinition $true `
+                    -Context $Context | Out-Null
+            }
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id -Force
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name -Force
+            $ConnectionString = "Data Source=powerbi://api.powerbi.com/v1.0/myorg/$($workspaceFQN);Initial Catalog=$($tierCustomFabricItem.name);Integrated Security=ClaimsToken"
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).CnnString" -Value $ConnectionString -Force
+            $FlattenedJson = "{`"`"byConnection`"`":{`"`"connectionString`"`":`"`"$($ConnectionString)`"`",`"`"connectionType`"`":`"`"pbiServiceXmlaStyleLive`"`",`"`"name`"`":`"`"EntityDataSource`"`",`"`"pbiModelDatabaseName`"`":`"`"$($tierCustomFabricItem.id)`"`",`"`"pbiModelVirtualServerName`"`":`"`"sobe_wowvirtualserver`"`",`"`"pbiServiceModelId`"`":null},`"`"byPath`"`":null}"
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).DatasetReference" -Value $FlattenedJson -Force
+        }
+        elseif ($tierCustomFabricItem.type -eq "datapipeline") {
+            Write-Message "Action" "Preparing Data Pipeline $($tierCustomFabricItem.name) Definition Parts"
+            $dataPipelineDefinitionParts = New-ItemDefinitionParts `
+                    -itemName $tierCustomFabricItem.name `
+                    -itemType $tierCustomFabricItem.type `
+                    -csvFilePath $newCsvFilePath `
+                    -dfnDirectory $tierCustomFabricItem.directory `
+                    -dfnParts $tierCustomFabricItem.dfnParts `
+                    -enableDiagnostics $enableDiagnostics
+
+            if ($null -ne $dataPipelineDefinitionParts) {
+                Write-Message "Action" "Updating Data Pipeline $($tierCustomFabricItem.name)"
+                New-FabricItem `
+                    -itemName $tierCustomFabricItem.name `
+                    -itemType $tierCustomFabricItem.type `
+                    -itemDefinitionParts $dataPipelineDefinitionParts  `
+                    -partsMandatory $tierCustomFabricItem.partsMandatory `
+                    -workspaceId $workspaceId `
+                    -updateDefinition $true `
+                    -Context $Context | Out-Null
+            }
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id -Force
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name -Force
+        }
+    }
+
+    #Detokenize config file with tier 2 PropertiesCatalog
+    $newCsvFilePath = Invoke-DetokenizeConfigFile -csvContent $csvContent -customFabricItemsTier $customFabricItemsTier -catalog $catalog -deploymentConfigFileName (Split-Path -Leaf $configFilePath)
+    #Deploy Tier 3 Fabric Items
+    $customFabricItemsTier++
+    $tierCustomFabricItems = $fabricItemsDiscovered | Where-Object {($_.tier) -eq $customFabricItemsTier} |  Sort-Object -Property priority #-Ascending
+    foreach ($tierCustomFabricItem in $tierCustomFabricItems) {
+        if ($tierCustomFabricItem.type -eq "report") {
+            Write-Message "Action" "Preparing Report $($tierCustomFabricItem.name) Definition Parts"
+            $reportDefinitionParts = New-ItemDefinitionParts `
+                -itemName $tierCustomFabricItem.name `
+                -itemType $tierCustomFabricItem.type `
+                -csvFilePath $newCsvFilePath `
+                -dfnDirectory $tierCustomFabricItem.directory `
+                -dfnParts $tierCustomFabricItem.dfnParts `
+                -enableDiagnostics $enableDiagnostics
+
+            if ($null -ne $reportDefinitionParts) {
+                Write-Message "Action" "Updating Report $($tierCustomFabricItem.name)"
+                New-FabricItem `
+                    -itemName $tierCustomFabricItem.name `
+                    -itemType $tierCustomFabricItem.type `
+                    -itemDefinitionParts $reportDefinitionParts  `
+                    -partsMandatory $tierCustomFabricItem.partsMandatory `
+                    -workspaceId $workspaceId `
+                    -updateDefinition $true `
+                    -Context $Context | Out-Null
+            }
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Id" -Value $tierCustomFabricItem.id -Force
+            $catalog | Add-Member -MemberType NoteProperty -Name "$($tierCustomFabricItem.itemFQN).Name" -Value $tierCustomFabricItem.name -Force
+        }
+    }
+}

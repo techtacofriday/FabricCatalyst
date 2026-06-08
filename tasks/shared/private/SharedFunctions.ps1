@@ -506,13 +506,19 @@ function Resolve-DeploymentCsvContent {
         [PSCustomObject]$tokens      # Object containing token keys and values
     )
     # Append default catalog rows so callers never need to hard-code them in their CSV
+    #$defaultRows = @(
+    #    "*,Notebook,dependencies.environment.workspaceId,""#{HomeWorkspace.Id}#"""
+    #    "*,Notebook,dependencies.lakehouse.default_lakehouse,""#{Default.Lakehouse.Id}#"""
+    #    "*,Notebook,dependencies.lakehouse.default_lakehouse_name,""#{Default.Lakehouse.Name}#"""
+    #    "*,Notebook,dependencies.lakehouse.default_lakehouse_workspace_id,""#{HomeWorkspace.Id}#"""
+    #    "*,SemanticModel,model.expressions[0].expression,""#{Default.Lakehouse.MConnectionExpresion}#"""
+    #    "*,Report,datasetReference,""#{Default.SemanticModel.DatasetReference}#"""
+    #)
     $defaultRows = @(
         "*,Notebook,dependencies.environment.workspaceId,""#{HomeWorkspace.Id}#"""
         "*,Notebook,dependencies.lakehouse.default_lakehouse,""#{Default.Lakehouse.Id}#"""
         "*,Notebook,dependencies.lakehouse.default_lakehouse_name,""#{Default.Lakehouse.Name}#"""
         "*,Notebook,dependencies.lakehouse.default_lakehouse_workspace_id,""#{HomeWorkspace.Id}#"""
-        "*,SemanticModel,model.expressions[0].expression,""#{Default.Lakehouse.MConnectionExpresion}#"""
-        "*,Report,datasetReference,""#{Default.SemanticModel.DatasetReference}#"""
     )
     $content = $content + $defaultRows
 

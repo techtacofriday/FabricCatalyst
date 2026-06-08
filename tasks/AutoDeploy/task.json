@@ -33,6 +33,11 @@
             "isExpanded": false
         },
         {
+            "name": "configuration",
+            "displayName": "Configuration",
+            "isExpanded": false
+        },
+        {
             "name": "advanced",
             "displayName": "Advanced",
             "isExpanded": false
@@ -237,6 +242,33 @@
             "groupName": "deploymentPipeline",
             "visibleRule": "createDeploymentPipeline = true",
             "helpMarkDown": "Semicolon-separated list of UPNs to assign as Pipeline Admin role."
+        },
+        {
+            "name": "deploymentDirectoryPath",
+            "type": "string",
+            "label": "Deployment Directory Path",
+            "required": true,
+            "defaultValue": "devops/pipelines/fabriccatalyst/dataproduct/deployment",
+            "groupName": "configuration",
+            "helpMarkDown": "Path in the repository to the root of the deployment configuration folder. Use forward slashes."
+        },
+        {
+            "name": "fabricItemsLocation",
+            "type": "string",
+            "label": "Fabric Items Location",
+            "required": false,
+            "defaultValue": "LocalDirectory",
+            "groupName": "configuration",
+            "helpMarkDown": "Source location for Fabric item definition files. 'LocalDirectory' reads from the checked-out repository."
+        },
+        {
+            "name": "fixItemReferences",
+            "type": "boolean",
+            "label": "Fix Item References",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "configuration",
+            "helpMarkDown": "When enabled, applies token substitution from the deployment configuration CSV before deploying items."
         },
         {
             "name": "enableDiagnostics",

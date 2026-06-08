@@ -34,6 +34,11 @@ param
     [parameter(Mandatory = $false)] [String] $workspaceMembersList,      #semicolon-separated UPNs
     [parameter(Mandatory = $false)] [String] $workspaceViewersList,      #semicolon-separated UPNs
     [parameter(Mandatory = $false)]
+    [ValidateSet("True", "False")] [String] $fixItemReferences = "False",
+    [parameter(Mandatory = $false)] [String] $deploymentDirectoryPath,
+    [ValidateSet("LocalDirectory")]
+    [parameter(Mandatory = $false)] [String] $fabricItemsLocation = "LocalDirectory",
+    [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
     [parameter(Mandatory = $false)] [Bool] $developerView = $false,
     # Local-run auth — omit when running inside an ADO pipeline (AzurePowerShell@5 handles auth)
@@ -78,6 +83,18 @@ try {
 
     if ($script:workspacePrefix -notmatch '^[A-Za-z0-9-]+$') {
         throw "The value for workspacePrefix contains invalid characters. Only letters, numbers, and dashes are allowed."
+    }
+    if ([Convert]::ToBoolean($script:fixItemReferences)) {
+        $missingParams = @()
+        if ([string]::IsNullOrWhiteSpace($script:deploymentDirectoryPath))                                                                         { $missingParams += 'deploymentDirectoryPath' }
+        if ([string]::IsNullOrWhiteSpace($script:organizationName))                                                                                { $missingParams += 'organizationName' }
+        if ($script:gitProviderType -eq 'AzureDevOps' -and [string]::IsNullOrWhiteSpace($script:projectName))                                     { $missingParams += 'projectName' }
+        if ([string]::IsNullOrWhiteSpace($script:repositoryName))                                                                                  { $missingParams += 'repositoryName' }
+        if ([string]::IsNullOrWhiteSpace($script:sourceBranchName))                                                                                { $missingParams += 'sourceBranchName' }
+        if ($script:gitProviderType -eq 'GitHub' -and [string]::IsNullOrWhiteSpace($script:externalGitPat))                                       { $missingParams += 'externalGitPat' }
+        if ($missingParams.Count -gt 0) {
+            throw "fixItemReferences is 'True' but the following required parameters are missing or empty: $($missingParams -join ', ')"
+        }
     }
     $availableCapacities = Get-FabricCapacities
     $capacityId = ($availableCapacities | Where-Object { $_.displayName -eq $script:capacityName -and $_.state -eq 'Active' }).id
@@ -128,6 +145,8 @@ try {
             Add-WorkspaceUsers -workspaceId $workspaceId -upnList $script:workspaceMembersList      -workspaceRole "Member"
             Add-WorkspaceUsers -workspaceId $workspaceId -upnList $script:workspaceViewersList      -workspaceRole "Viewer"
 
+            $configBranchName = $script:sourceBranchName
+
             if([int]$environment.gitEnabled -eq 1) {
                 $script:fabricGitConnectionId = (Get-FabricConnection -connectionName $script:fabricGitConnectionName).id
                 if ([string]::IsNullOrWhiteSpace($script:fabricGitConnectionId)) {
@@ -162,6 +181,38 @@ try {
                     -ItemsGitFolder        $script:itemsGitFolder `
                     -FabricGitConnectionId $script:fabricGitConnectionId
                 Connect-WorkspaceToGit -workspaceId $workspaceId -GitConfig $gitConfig
+            }
+
+            if([Convert]::ToBoolean($script:fixItemReferences)) {
+                $configFilePath = "{0}/config-{1}.csv" -f $script:deploymentDirectoryPath, $environment.Code
+                $azdoConfig = New-AzdoConfig `
+                    -AzdoBaseUrl         $script:azdoBaseUrl `
+                    -OrganizationName    $script:organizationName `
+                    -ProjectName         $script:projectName `
+                    -RepositoryName      $script:repositoryName `
+                    -SourceBranchName    $configBranchName `
+                    -DevOpsRequestHeader $script:devOpsRequestHeader `
+                    -GitProviderType     $script:gitProviderType `
+                    -Pat                 $script:externalGitPat
+                if (-not (Test-DevOpsRepoPath -gitPath $configFilePath -branchName $configBranchName -AzdoConfig $azdoConfig)) {
+                    throw "Customization config file '$configFilePath' not found in the repository. Stopping deployment for '$($workspaceFQN)'."
+                }
+                Write-Message "Action" "Customizing deployment on $($workspaceFQN)"
+                Write-Message "Action" "Scanning workspace $($script:itemsDirectoryPath)"
+                $fabricItemsDiscovered = ScanWorkspaceForSupportedItems -workspaceId $workspaceId
+                if ($null -ne $fabricItemsDiscovered) {
+                    $script:fabricItemsPropertiesCatalog = [PSCustomObject]@{}
+                    $script:fabricItemsPropertiesCatalog | Add-Member -MemberType NoteProperty -Name "HomeWorkspace.Id" -Value $workspaceId
+                    Invoke-FabricItemCustomization `
+                        -workspaceFQN $workspaceFQN `
+                        -workspaceId $workspaceId `
+                        -fabricItemsDiscovered $fabricItemsDiscovered `
+                        -configBranchName $configBranchName `
+                        -configFilePath $configFilePath `
+                        -enableDiagnostics $script:enableDiagnostics `
+                        -catalog $script:fabricItemsPropertiesCatalog `
+                        -AzdoConfig $azdoConfig
+                }
             }
         }
     }
