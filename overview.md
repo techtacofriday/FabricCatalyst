@@ -40,7 +40,7 @@ Use this when a workspace needs a Git sync followed by connection binding or not
 
 **Auto Deployment** provisions workspaces and wires them to Fabric's native capabilities:
 
-1. Creates (or updates) workspaces named by prefix and environment code, assigns them to a capacity and optionally a domain.
+1. Creates (or updates) workspaces named by prefix and environment code, assigns them to a capacity and optionally a domain. Provisions a managed identity for each workspace by default; can be disabled via `provisionIdentity` when the service principal lacks identity provisioning permissions.
 2. For Git-enabled environments, creates a workspace branch in the source repository and connects the workspace to it using Fabric's built-in Git integration.
 3. Syncs roles (Admins, Contributors, Members, Viewers) against the declared lists on every run.
 4. Optionally creates a Fabric deployment pipeline so that `FabricCatalyst - Promote Stage` can advance content from dev to test to prod without touching the Fabric UI.
