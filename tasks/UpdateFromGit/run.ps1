@@ -7,6 +7,7 @@ $fabricGitConnectionName = $env:FC_FABRICGITCONNECTIONNAME
 $semanticModelsBinding  = $env:FC_SEMANTICMODELSBINDING
 $postDeploymentFolder   = $env:FC_POSTDEPLOYMENTFOLDER
 $enableDiagnostics      = $env:FC_ENABLEDIAGNOSTICS
+$notebookMaxAttempts    = if ($env:FC_NOTEBOOKMAXATTEMPTS) { [int]$env:FC_NOTEBOOKMAXATTEMPTS } else { 12 }
 #endregion
 
 #region Azure authentication
@@ -41,6 +42,7 @@ $params = @{
     semanticModelsBinding   = $semanticModelsBinding
     postDeploymentFolder    = $postDeploymentFolder
     enableDiagnostics       = $enableDiagnostics
+    notebookMaxAttempts     = $notebookMaxAttempts
 }
 
 try {

@@ -16,6 +16,7 @@ param
     [parameter(Mandatory = $false)] [String] $workspaceName,
     [parameter(Mandatory = $false)] [String] $semanticModelsBinding = "[]",
     [parameter(Mandatory = $false)] [String] $postDeploymentFolder = "post-deployment",
+    [parameter(Mandatory = $false)] [int]    $notebookMaxAttempts = 12,
     [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
     [parameter(Mandatory = $false)] [Bool] $developerView = $false,
@@ -143,7 +144,7 @@ try {
                 $name   = $item.displayName
                 if ($item.displayName -ne "notebookSample") {
                     Write-Message "Action" "Running notebook '$name' (id=$itemId) in folder '$($script:postDeploymentFolder)'..."
-                    Invoke-FabricNotebook -workspaceId $workspace.id -notebookItemId $itemId | Out-Null
+                    Invoke-FabricNotebook -workspaceId $workspace.id -notebookItemId $itemId -attemptMax $notebookMaxAttempts | Out-Null
                 }
             }
             Write-Message "Info" "All notebooks in folder '$($script:postDeploymentFolder)' completed successfully."

@@ -426,12 +426,12 @@ function Wait-FabricLRO {
   param (
       [parameter(Mandatory = $true)]  [String]         $operationId,
       [parameter(Mandatory = $false)] [int]            $retryInterval = 5,
-      [parameter(Mandatory = $false)] [int]            $attempMax = 6,
+      [parameter(Mandatory = $false)] [int]            $attemptMax = 8,
       [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
   )
-    $attempCount = 1
+    $attemptCount = 1
     while ($true) {
-        Write-Message "Action" "Waiting $($retryInterval) secs for a long running operation ($($operationId)) to complete (Attempt $($attempCount) out of $($attempMax))"
+        Write-Message "Action" "Waiting $($retryInterval) secs for a long running operation ($($operationId)) to complete (Attempt $($attemptCount) out of $($attemptMax))"
         Start-Sleep -Seconds $retryInterval
         $endPoint = "/operations/$($operationId)" #https://learn.microsoft.com/en-us/rest/api/fabric/core/long-running-operations/get-operation-state
         $lroResponse = Invoke-ApiEndpoint -endPoint $endPoint -method "GET" -Context $Context
@@ -449,10 +449,10 @@ function Wait-FabricLRO {
             elseif ($operationState.status -eq "Failed") {
                 throw ($operationState.error.message)
             }
-            if ($attempCount -ge $attempMax) {
-                throw "Operation ($($operationId)) did not complete after $($attempMax) attempts."
+            if ($attemptCount -ge $attemptMax) {
+                throw "Operation ($($operationId)) did not complete after $($attemptMax) attempts."
             }
-            $attempCount = $attempCount + 1
+            $attemptCount = $attemptCount + 1
         }
         else {
             $errorResponse = Get-ErrorResponse($lroResponse.responseObject)
