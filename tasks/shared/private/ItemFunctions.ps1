@@ -9,14 +9,14 @@ function Wait-FabricNotebookJob {
   param (
       [parameter(Mandatory = $true)]  [String]         $location,
       [parameter(Mandatory = $false)] [int]             $retryInterval = 5,
-      [parameter(Mandatory = $false)] [int]             $attempMax = 6,
+      [parameter(Mandatory = $false)] [int]             $attemptMax = 12,
       [parameter(Mandatory = $false)] [PSCustomObject]  $Context = $null
   )
     $resolvedBaseUrl = if ($null -ne $Context) { $Context.FabricBaseUrl } else { $script:fabricBaseUrl }
-    $attempCount = 1
+    $attemptCount = 1
     $endPoint = "/" + $location.Substring(($resolvedBaseUrl + "/v1").Length).TrimStart('/')
-    while ($attempCount -lt $attempMax) {
-        Write-Message "Action" "Waiting $($retryInterval) secs for notebook job to complete (attempt $($attempCount)/$($attempMax))"
+    while ($attemptCount -lt $attemptMax) {
+        Write-Message "Action" "Waiting $($retryInterval) secs for notebook job to complete (attempt $($attemptCount)/$($attemptMax))"
         Start-Sleep -Seconds $retryInterval
         $lroResponse = Invoke-ApiEndpoint -endPoint $endPoint -method "GET" -Context $Context
         if ($lroResponse.isException -eq $false) {
@@ -28,13 +28,13 @@ function Wait-FabricNotebookJob {
             elseif ($operationState.status -in @("Failed", "Cancelled", "Dedup")) {
                 throw ($operationState.failureReason)
             }
-            $attempCount++
+            $attemptCount++
         }
         else {
             throw (APIReturnedError -apiCallResponse $lroResponse -intendedAction "polling notebook job status '$location'")
         }
     }
-    throw "Notebook job at '$location' did not complete within $($attempMax) attempts."
+    throw "Notebook job at '$location' did not complete within $($attemptMax) attempts."
 }
 
 function Get-FabricFolders {
@@ -77,7 +77,9 @@ function Invoke-FabricNotebook {
         [Parameter(Mandatory = $true)]
         [ValidateNotNullOrEmpty()]
         [ValidatePattern('\S')]
-        [string] $notebookItemId
+        [string] $notebookItemId,
+        [Parameter(Mandatory = $false)]
+        [int] $attemptMax = 12
     )
     try {
         $body = @{ executionData = @{} } | ConvertTo-Json -Depth 10
@@ -89,7 +91,7 @@ function Invoke-FabricNotebook {
                 $location      = [string]($resp.responseObject.Headers.'Location'    | Select-Object -First 1)
                 $retryInterval = [int]($resp.responseObject.Headers.'Retry-After' | Select-Object -First 1)
                 Write-Message "Info" "Request accepted (Location $($location)), waiting for notebook to complete."
-                Wait-FabricNotebookJob -location $location -retryInterval $retryInterval | Out-Null
+                Wait-FabricNotebookJob -location $location -retryInterval $retryInterval -attemptMax $attemptMax | Out-Null
             }
         }
         else {
@@ -419,7 +421,7 @@ function New-FabricItem {
             $operationId  = [string]($itemResponse.responseObject.Headers.'x-ms-operation-id' | Select-Object -First 1)
             $retryInterval = [int]($itemResponse.responseObject.Headers.'Retry-After' | Select-Object -First 1)
             Write-Message "Info" "Request accepted (operation id $($operationId)), deployment in progress."
-            Wait-FabricLRO -operationId $operationId -retryInterval $retryInterval -attempMax 20 -Context $Context | Out-Null
+            Wait-FabricLRO -operationId $operationId -retryInterval $retryInterval -Context $Context | Out-Null
             $item = Get-FabricItem -itemName $itemName -itemType $itemType -workspaceId $workspaceId -Context $Context
             Write-Message "Info" "$($itemName) has been deployed successfully"
         }
@@ -519,7 +521,7 @@ function Get-FabricItemDefinition {
         $operationId   = [string]($getDefinitionResponse.responseObject.Headers.'x-ms-operation-id' | Select-Object -First 1)
         $retryInterval = [int]($getDefinitionResponse.responseObject.Headers.'Retry-After'          | Select-Object -First 1)
         Write-Message "Info" "Request accepted (operation id $($operationId)), deployment in progress."
-        $itemDefinition = Wait-FabricLRO -operationId $operationId -retryInterval $retryInterval -attempMax 20 -Context $Context
+        $itemDefinition = Wait-FabricLRO -operationId $operationId -retryInterval $retryInterval  -Context $Context
         Write-Message "Info" "LRO operation returned as successfull"
     }
     else {

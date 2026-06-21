@@ -531,12 +531,12 @@ function Wait-PrivateEndpoint {
   param (
       [parameter(Mandatory = $true)] [String] $location,
       [parameter(Mandatory = $false)] [int] $retryInterval = 5, # Retry interval in seconds
-      [parameter(Mandatory = $false)] [int] $attempMax = 6 # Total timeout in seconds
+      [parameter(Mandatory = $false)] [int] $attemptMax = 12 # Total timeout in seconds
   )
-    $attempCount = 1          # Tracks the total elapsed time
+    $attemptCount = 1          # Tracks the total elapsed time
     $endPoint = "/" + $location.Substring($script:fabricBaseUrl.Length).TrimStart('/')
-    while ($attempCount -lt $attempMax) {
-        Write-Message "Action" "Waiting $($retryInterval) secs for a private endpoint ($($location)) to succeeded (Attempt $($attempCount) out of $($attempMax))"
+    while ($attemptCount -lt $attemptMax) {
+        Write-Message "Action" "Waiting $($retryInterval) secs for a private endpoint ($($location)) to succeeded (Attempt $($attemptCount) out of $($attemptMax))"
         Start-Sleep -Seconds $retryInterval
         $lroResponse = Invoke-ApiEndpoint -endPoint $endPoint -method "GET"
         if ($lroResponse.isException -eq $false) {
@@ -550,7 +550,7 @@ function Wait-PrivateEndpoint {
                 $err = "Failed to provision the private endpoint"
                 throw $err
             }
-            $attempCount = $attempCount+1
+            $attemptCount = $attemptCount+1
         }
         else {
             throw (APIReturnedError -apiCallResponse $lroResponse -intendedAction "wait for private endpoint to succeeded '$location'")
@@ -582,7 +582,9 @@ function New-ManagedPrivateEndpoint {
         [parameter(Mandatory = $true)] [String] $workspaceId,
         [parameter(Mandatory = $true)] [String] $privateEndpointName,
         [parameter(Mandatory = $true)] [String] $targetPrivateLinkResourceId,
-        [parameter(Mandatory = $true)] [String] $targetSubresourceType 
+        [parameter(Mandatory = $true)] [String] $targetSubresourceType,
+        [Parameter(Mandatory = $false)]
+        [int] $attemptMax = 12
     )
 
     $privateEndpoint = Get-PrivateEndpoint -workspaceId $workspaceId -privateEndpointName $privateEndpointName -targetPrivateLinkResourceId $targetPrivateLinkResourceId
@@ -602,7 +604,7 @@ function New-ManagedPrivateEndpoint {
     if ($managedPrivateEndpointResponse.responseObject.StatusCode -eq 201) {
         $location  = [string]($managedPrivateEndpointResponse.responseObject.Headers.'Location' | Select-Object -First 1)
         Write-Message "Info" "Request accepted (Location $($location))."
-        Wait-PrivateEndpoint -location $location | Out-Null              
+        Wait-PrivateEndpoint -location $location -attemptMax $attemptMax | Out-Null              
     }
     else {
         throw (APIReturnedError -apiCallResponse $managedPrivateEndpointResponse -intendedAction "create managed private endpoint")

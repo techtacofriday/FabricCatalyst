@@ -12,8 +12,8 @@
     "author": "TechTacoFriday",
     "version": {
         "Major": 1,
-        "Minor": 2,
-        "Patch": 3
+        "Minor": 3,
+        "Patch": 0
     },
     "instanceNameFormat": "FabricCatalyst Update From Git $(workspaceName)",
     "groups": [
@@ -79,6 +79,15 @@
             "defaultValue": "post-deployment",
             "groupName": "notebooks",
             "helpMarkDown": "Name of the workspace folder containing notebooks to run after the sync. All notebooks in the folder are executed in order. Use this for any post-deployment automation — role-level security, data validation, configuration, or similar tasks."
+        },
+        {
+            "name": "notebookMaxAttempts",
+            "type": "string",
+            "label": "Max Polling Attempts",
+            "required": false,
+            "defaultValue": "12",
+            "groupName": "notebooks",
+            "helpMarkDown": "Maximum number of status checks when waiting for a post-deployment notebook to complete. Each attempt waits for the interval returned by the API (typically 5 seconds). Increase this for long-running notebooks or when Spark nodes take extra time to initialise."
         },
         {
             "name": "enableDiagnostics",
