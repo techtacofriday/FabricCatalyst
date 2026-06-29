@@ -26,7 +26,8 @@ function run() {
             'fabricGitConnectionName', 'organizationName', 'projectName',
             'repositoryName', 'sourceBranchName', 'gitProviderType', 'externalGitPat',
             'itemsGitFolder', 'domainName', 'subDomainName',
-            'workspaceAdminsList', 'deploymentPipelineName', 'pipelineAdminsList',
+            'workspaceAdminsList', 'workspaceContributorsList', 'workspaceMembersList', 'workspaceViewersList',
+            'deploymentPipelineName', 'pipelineAdminsList',
         ]) {
             env[`FC_${name.toUpperCase()}`] = tl.getInput(name, false) || '';
         }
