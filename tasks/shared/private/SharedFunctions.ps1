@@ -833,7 +833,7 @@ function Export-ContentToFile {
     }
 
     # Write the content to the file
-    Set-Content -Path $filePath -Value $content
+    [System.IO.File]::WriteAllText($filePath, $content, [System.Text.UTF8Encoding]::new($false))
     return $true
 }
 
