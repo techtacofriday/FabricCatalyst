@@ -412,7 +412,7 @@ function Add-WorkspaceUsers {
             $principalContextById[$principalId] = $principalCtx
         }
     }
-    $existingPrincipalIds = $existingPrincipalIds | Select-Object -Unique
+    $existingPrincipalIds = @($existingPrincipalIds | Select-Object -Unique)
 
     # Identify existing Service Principals in THIS role (to preserve them)
     $existingSpnIdsForRole = @(
