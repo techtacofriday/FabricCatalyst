@@ -34,6 +34,8 @@ param
     [parameter(Mandatory = $false)] [String] $workspaceMembersList,      #semicolon-separated UPNs
     [parameter(Mandatory = $false)] [String] $workspaceViewersList,      #semicolon-separated UPNs
     [parameter(Mandatory = $false)]
+    [ValidateSet("True", "False")] [String] $provisionIdentity = "True",
+    [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
     [parameter(Mandatory = $false)] [Bool] $developerView = $false,
     # Local-run auth — omit when running inside an ADO pipeline (AzurePowerShell@5 handles auth)
@@ -118,7 +120,7 @@ try {
         foreach ($environment in $environments) {
             $workspaceFQN = "ws_{0}_{1}" -f $script:workspacePrefix, $environment.Code #$envCode
             Write-Message "Action" "Creating workspace $($workspaceFQN) in capacity $($script:capacityName)"
-            $workspaceId = New-FabricWorkspace -workspaceName $workspaceFQN -capacityId $capacityId
+            $workspaceId = New-FabricWorkspace -workspaceName $workspaceFQN -capacityId $capacityId -ProvisionIdentity ([Convert]::ToBoolean($script:provisionIdentity))
             If (![String]::IsNullOrWhiteSpace($domainId)) {
                 Add-WorkspaceToDomain -domainId $domainId -workspaceId $workspaceId | Out-Null
             }
@@ -145,7 +147,7 @@ try {
                     -GitProviderType     $script:gitProviderType `
                     -Pat                 $script:externalGitPat
                 if([Convert]::ToBoolean($script:useEmptyBranch)) {
-                    New-GitBranchFromScratch -newBranchName $newBranchName -itemsGitFolder $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig | Out-Null
+                    New-GitBranchFromScratch -newBranchName $newBranchName -itemsGitFolder $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig -ForceRecreate:([Convert]::ToBoolean($script:forceRecreateBranch)) | Out-Null
                 } else {
                     if (-not (Test-DevOpsRepoPath -gitPath $script:itemsGitFolder -AzdoConfig $gitBranchAzdoConfig)) {
                         throw "Path '$($script:itemsGitFolder)' not found in source branch '$($gitBranchAzdoConfig.SourceBranchName)'. Add this folder to the source branch before running the deployment."

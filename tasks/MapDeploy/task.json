@@ -12,8 +12,8 @@
     "author": "TechTacoFriday",
     "version": {
         "Major": 1,
-        "Minor": 4,
-        "Patch": 3
+        "Minor": 6,
+        "Patch": 1
     },
     "instanceNameFormat": "FabricCatalyst Map Deploy $(jsonMapFileName)",
     "groups": [

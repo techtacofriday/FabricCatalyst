@@ -112,19 +112,19 @@ function Get-LakehouseSqlEndpoint {
     )
     #Get the Connection string id from the Item
     $lakehouse = Get-Lakehouse -lakehouseId $lakehouseId -workspaceId $workspaceId -Context $Context
-    $attempCount = 1 # Tracks the total elapsed time
+    $attemptCount = 1 # Tracks the total elapsed time
     $retryInterval = 5 # Retry interval in seconds
-    $attempMax = 10 # Total timeout in seconds
+    $attemptMax = 12 # Total timeout in seconds
     while ($true) {
         if ($lakehouse.properties.sqlEndpointProperties.provisioningStatus -eq "Success") {
             return $lakehouse.properties.sqlEndpointProperties.connectionString
         }
-        elseif ($attempCount -eq $attempMax) {
+        elseif ($attemptCount -eq $attemptMax) {
             throw "Max number of attempts has been reached"
         }
-        Write-Message "Action" "Waiting $($retryInterval) secs for sqlEndpointProperties to be successfully provisioned (Attempt $($attempCount) out of $($attempMax))"
+        Write-Message "Action" "Waiting $($retryInterval) secs for sqlEndpointProperties to be successfully provisioned (Attempt $($attemptCount) out of $($attemptMax))"
         Start-Sleep -Seconds $retryInterval
         $lakehouse = Get-Lakehouse -lakehouseId $lakehouseId -workspaceId $workspaceId -Context $Context
-        $attempCount = $attempCount+1
+        $attemptCount = $attemptCount+1
     }
 }

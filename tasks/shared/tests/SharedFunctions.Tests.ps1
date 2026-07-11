@@ -1120,6 +1120,165 @@ Describe 'New-GitBranchFromExisting - branch exists, skip by default' {
 }
 
 # =============================================================================
+Describe 'New-GitBranchFromScratch - branch exists handling' {
+
+    BeforeAll {
+        . "$PSScriptRoot\..\private\GitFunctions.ps1"
+        Mock Write-Message { }
+        Mock New-RequestHeader { return @{ Authorization = 'Bearer pat' } }
+        Mock APIReturnedError { return "mocked-error" }
+    }
+
+    Context 'GitHub provider - branch already exists, no -ForceRecreate' {
+        BeforeEach {
+            $ghConfig = New-AzdoConfig `
+                -AzdoBaseUrl      'https://dev.azure.com' `
+                -OrganizationName 'ghOrg' `
+                -ProjectName      'testProject' `
+                -RepositoryName   'ghRepo' `
+                -SourceBranchName 'main' `
+                -GitProviderType  'GitHub' `
+                -Pat              'ghpat'
+
+            Mock Invoke-ApiEndpoint {
+                param($endPoint, $method)
+                if ($method -eq 'POST' -and $endPoint -like '*/git/blobs') {
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = '{"sha":"blobsha"}' }; isException = $false }
+                }
+                if ($method -eq 'POST' -and $endPoint -like '*/git/trees') {
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = '{"sha":"treesha"}' }; isException = $false }
+                }
+                if ($method -eq 'POST' -and $endPoint -like '*/git/commits') {
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = '{"sha":"commitsha"}' }; isException = $false }
+                }
+                # POST ref - branch already exists
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 422; Content = ''; Message = 'Reference already exists'; Body = '' }; isException = $false }
+            }
+        }
+
+        It 'throws when branch already exists' {
+            { New-GitBranchFromScratch -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig } | Should -Throw -ExpectedMessage "*already exists*"
+        }
+    }
+
+    Context 'GitHub provider - branch already exists, -ForceRecreate' {
+        BeforeEach {
+            $ghConfig = New-AzdoConfig `
+                -AzdoBaseUrl      'https://dev.azure.com' `
+                -OrganizationName 'ghOrg' `
+                -ProjectName      'testProject' `
+                -RepositoryName   'ghRepo' `
+                -SourceBranchName 'main' `
+                -GitProviderType  'GitHub' `
+                -Pat              'ghpat'
+
+            $callSequence = [System.Collections.Generic.List[int]]::new()
+            Mock Invoke-ApiEndpoint {
+                $callSequence.Add(1)
+                $n = $callSequence.Count
+                if ($n -eq 1) {
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = '{"sha":"blobsha"}' }; isException = $false }
+                }
+                if ($n -eq 2) {
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = '{"sha":"treesha"}' }; isException = $false }
+                }
+                if ($n -eq 3) {
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = '{"sha":"commitsha"}' }; isException = $false }
+                }
+                if ($n -eq 4) {
+                    # POST ref - branch already exists
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 422; Content = ''; Message = 'Reference already exists'; Body = '' }; isException = $false }
+                }
+                if ($n -eq 5) {
+                    # DELETE (Remove-GitBranch)
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 204; Content = '' }; isException = $false }
+                }
+                # POST ref retry - success
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = '{"ref":"refs/heads/workspace/ws_dev","sha":"commitsha"}' }; isException = $false }
+            }
+        }
+
+        It 'deletes the existing branch and creates a fresh empty one' {
+            New-GitBranchFromScratch -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig -ForceRecreate | Out-Null
+            Should -Invoke Invoke-ApiEndpoint -Times 6 -Exactly
+        }
+
+        It 'emits a Warning message before recreating' {
+            New-GitBranchFromScratch -newBranchName 'workspace/ws_dev' -AzdoConfig $ghConfig -ForceRecreate | Out-Null
+            Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
+        }
+    }
+
+    Context 'AzureDevOps provider - branch already exists, no -ForceRecreate' {
+        BeforeEach {
+            $testConfig = New-AzdoConfig `
+                -AzdoBaseUrl         'https://dev.azure.com' `
+                -OrganizationName    'testOrg' `
+                -ProjectName         'testProject' `
+                -RepositoryName      'testRepo' `
+                -SourceBranchName    'main'
+
+            Mock Invoke-ApiEndpoint {
+                $content = '{"value":[{"name":"refs/heads/workspace/ws_dev","objectId":"existingsha"}]}'
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+            }
+        }
+
+        It 'throws when branch already exists' {
+            { New-GitBranchFromScratch -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig } | Should -Throw -ExpectedMessage "*already exists*"
+        }
+
+        It 'only makes the pre-check call and does not attempt to push' {
+            { New-GitBranchFromScratch -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig } | Should -Throw
+            Should -Invoke Invoke-ApiEndpoint -Times 1 -Exactly
+        }
+    }
+
+    Context 'AzureDevOps provider - branch already exists, -ForceRecreate' {
+        BeforeEach {
+            $testConfig = New-AzdoConfig `
+                -AzdoBaseUrl         'https://dev.azure.com' `
+                -OrganizationName    'testOrg' `
+                -ProjectName         'testProject' `
+                -RepositoryName      'testRepo' `
+                -SourceBranchName    'main'
+
+            $callSequence = [System.Collections.Generic.List[int]]::new()
+            Mock Invoke-ApiEndpoint {
+                $callSequence.Add(1)
+                $n = $callSequence.Count
+                if ($n -eq 1) {
+                    # GET refs pre-check - branch exists
+                    $content = '{"value":[{"name":"refs/heads/workspace/ws_dev","objectId":"existingsha"}]}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                if ($n -eq 2) {
+                    # GET SHA for Remove-GitBranch
+                    $content = '{"value":[{"name":"refs/heads/workspace/ws_dev","objectId":"existingsha"}]}'
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = $content }; isException = $false }
+                }
+                if ($n -eq 3) {
+                    # POST zeros (delete)
+                    return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 200; Content = '{"value":[]}' }; isException = $false }
+                }
+                # POST pushes (create empty branch)
+                return [PSCustomObject]@{ responseObject = [PSCustomObject]@{ StatusCode = 201; Content = '{}' }; isException = $false }
+            }
+        }
+
+        It 'deletes the existing branch and creates a fresh empty one' {
+            New-GitBranchFromScratch -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig -ForceRecreate | Out-Null
+            Should -Invoke Invoke-ApiEndpoint -Times 4 -Exactly
+        }
+
+        It 'emits a Warning message before recreating' {
+            New-GitBranchFromScratch -newBranchName 'workspace/ws_dev' -AzdoConfig $testConfig -ForceRecreate | Out-Null
+            Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
+        }
+    }
+}
+
+# =============================================================================
 Describe 'Test-DevOpsRepoPath' {
 
     BeforeAll {

@@ -2,7 +2,7 @@
     "id": "e377abce-fe73-4026-a275-46369405abf1",
     "name": "FabricCatalystAutoDeploy",
     "friendlyName": "FabricCatalyst - Auto Deployment",
-    "description": "Deploys Microsoft Fabric items from a Git-connected workspace using branch auto-discovery. Handles tiered deployment of Lakehouses, Warehouses, Notebooks, Semantic Models, Data Pipelines and Reports.",
+    "description": "Provisions Fabric workspaces, connects them to Git branches using Fabric's built-in Git integration, assigns workspace roles, and optionally creates a Fabric deployment pipeline.",
     "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
     "category": "Deploy",
     "visibility": [
@@ -12,8 +12,8 @@
     "author": "TechTacoFriday",
     "version": {
         "Major": 2,
-        "Minor": 0,
-        "Patch": 2
+        "Minor": 3,
+        "Patch": 1
     },
     "instanceNameFormat": "FabricCatalyst Auto Deploy $(workspacePrefix)",
     "groups": [
@@ -237,6 +237,15 @@
             "groupName": "deploymentPipeline",
             "visibleRule": "createDeploymentPipeline = true",
             "helpMarkDown": "Semicolon-separated list of UPNs to assign as Pipeline Admin role."
+        },
+        {
+            "name": "provisionIdentity",
+            "type": "boolean",
+            "label": "Provision Workspace Identity",
+            "required": false,
+            "defaultValue": "true",
+            "groupName": "advanced",
+            "helpMarkDown": "When enabled, provisions a managed identity for each workspace after creation. Disable if the service principal lacks the required permissions to provision identities."
         },
         {
             "name": "enableDiagnostics",

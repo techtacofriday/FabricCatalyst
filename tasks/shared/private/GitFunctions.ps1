@@ -174,7 +174,8 @@ function New-GitBranchFromScratch {
     param (
         [parameter(Mandatory = $true)]  [String]         $newBranchName,
         [parameter(Mandatory = $false)] [String]         $itemsGitFolder = "/fabric",
-        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null
+        [parameter(Mandatory = $false)] [PSCustomObject] $AzdoConfig = $null,
+        [parameter(Mandatory = $false)] [Switch]         $ForceRecreate
     )
     $azdoBase     = if ($null -ne $AzdoConfig) { $AzdoConfig.AzdoBaseUrl }      else { $script:azdoBaseUrl }
     $org          = if ($null -ne $AzdoConfig) { $AzdoConfig.OrganizationName } else { $script:organizationName }
@@ -208,6 +209,14 @@ function New-GitBranchFromScratch {
 
         $refBody = "{`"ref`":`"refs/heads/$($newBranchName)`",`"sha`":`"$($commitSha)`"}"
         $refResp = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs" -method "POST" -body $refBody
+        if ($refResp.responseObject.StatusCode -eq 422) {
+            if (-not $ForceRecreate) {
+                throw "Branch $($newBranchName) already exists. An empty branch was explicitly requested - use forceRecreateBranch to delete and recreate it."
+            }
+            Write-Message "Warning" "Branch $($newBranchName) already exists - force-recreating as an empty branch."
+            Remove-GitBranch -branchName $newBranchName -AzdoConfig $AzdoConfig
+            $refResp = Invoke-ApiEndpoint -useRequestHeader "GitHub" -baseUrl $ghBase -endPoint "/repos/$($org)/$($repo)/git/refs" -method "POST" -body $refBody
+        }
         if ($refResp.responseObject.StatusCode -eq 201) {
             Write-Message "Info" "Branch $($newBranchName) created as an independent root on GitHub."
             return $newBranchName
@@ -218,6 +227,23 @@ function New-GitBranchFromScratch {
     }
 
     $invokeHeader = if (-not [string]::IsNullOrWhiteSpace($resolvedPat)) { New-RequestHeader -authType "Basic" -accessToken $resolvedPat } else { $null }
+
+    $checkEndPoint = "/$($org)/$($project)/_apis/git/repositories/$($repo)/refs?filter=heads/$($newBranchName)&api-version=7.0"
+    $checkResp = if ($null -ne $invokeHeader) {
+        Invoke-ApiEndpoint -CustomHeader $invokeHeader -baseUrl $azdoBase -endPoint $checkEndPoint
+    } else {
+        Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBase -endPoint $checkEndPoint
+    }
+    if ($checkResp.responseObject.StatusCode -eq 200) {
+        $existingRef = ($checkResp.responseObject.Content | ConvertFrom-Json).value | Where-Object { $_.name -eq "refs/heads/$($newBranchName)" }
+        if ($null -ne $existingRef) {
+            if (-not $ForceRecreate) {
+                throw "Branch $($newBranchName) already exists. An empty branch was explicitly requested - use forceRecreateBranch to delete and recreate it."
+            }
+            Write-Message "Warning" "Branch $($newBranchName) already exists - force-recreating as an empty branch."
+            Remove-GitBranch -branchName $newBranchName -AzdoConfig $AzdoConfig
+        }
+    }
 
     $jsonBody = @"
 {
