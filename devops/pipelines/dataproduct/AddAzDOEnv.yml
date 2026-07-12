@@ -1,0 +1,60 @@
+trigger: none
+
+pool:
+  vmImage: "windows-latest"
+
+parameters:
+
+- name: azdoServiceConnection
+  displayName: "Azure Service Connection"
+  type: string
+  default: "azdo-serviceconnection-arm-d"
+
+- name: environmentName
+  displayName: "Environment Name"
+  type: string
+  default: "AutoDeploymentDemo"
+
+- name: description
+  displayName: "Environment Description"
+  type: string
+  default: ""
+
+- name: coAdministrators
+  displayName: "Co-Administrators (semicolon-separated UPNs/groups)"
+  type: string
+  default: "hector.lopez@innorway.onmicrosoft.com"
+
+- name: approverUpn
+  displayName: "Approver (UPN or group, optional)"
+  type: string
+  default: ""
+
+- name: enableDiagnostics
+  displayName: "Enable Diagnostics?"
+  type: boolean
+  default: False
+
+
+stages:
+  - stage: AddAzDOEnv
+    displayName: Add Azure DevOps Environment
+    variables:
+      - template: ./deployment/variables.yml
+    jobs:
+    - job: AddAzDOEnv
+      displayName: Provision Environment ${{ parameters.environmentName }}
+      steps:
+        - checkout: none
+
+        - task: FabricCatalystAddAzDOEnv@1
+          displayName: 'FabricCatalyst - Add Azure DevOps Environment'
+          inputs:
+            azureSubscription: ${{ parameters.azdoServiceConnection }}
+            organizationName: ${{ variables.organizationName }}
+            projectName: ${{ variables.projectName }}
+            environmentName: ${{ parameters.environmentName }}
+            description: ${{ parameters.description }}
+            coAdministrators: ${{ parameters.coAdministrators }}
+            approverUpn: ${{ parameters.approverUpn }}
+            enableDiagnostics: ${{ parameters.enableDiagnostics }}
