@@ -79,7 +79,7 @@
             "label": "Co-Administrators",
             "required": false,
             "groupName": "security",
-            "helpMarkDown": "Semicolon-separated list of UPNs/group names to grant Administrator on the environment, in addition to the identity running this task. This is a full sync: anyone not listed here (and not the running identity) is removed as Administrator."
+            "helpMarkDown": "Semicolon-separated list of UPNs/group names to grant Administrator on the environment. Additive only - existing Administrators (including whoever creates the environment, which Azure DevOps assigns automatically) are never removed."
         },
         {
             "name": "approverUpn",

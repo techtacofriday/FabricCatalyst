@@ -52,7 +52,7 @@ try {
     }
 
     Initialize-AuthContext -TenantId $tenantId -ServicePrincipalId $servicePrincipalId -ServicePrincipalSecret $servicePrincipalSecret | Out-Null
-    $azContext = Get-AzContext
+    Get-AzContext | Out-Null
 
     $azdoConfig = New-AzdoConfig `
         -AzdoBaseUrl         $script:azdoBaseUrl `
@@ -63,9 +63,8 @@ try {
     Write-Message "Action" "Creating environment '$environmentName' in project '$projectName'"
     $environmentId = New-DevOpsEnvironment -environmentName $environmentName -description $description -Context $azdoConfig
 
-    # Account.Id is the UPN for an interactive user, or the AAD Application (client) id for a Service Principal.
     Write-Message "Action" "Syncing Administrators on environment '$environmentName' (id=$environmentId)"
-    Set-DevOpsEnvironmentAdministrators -EnvironmentId $environmentId -CallerIdentifier $azContext.Account.Id -CoAdministrators $coAdministrators -Context $azdoConfig
+    Set-DevOpsEnvironmentAdministrators -EnvironmentId $environmentId -CoAdministrators $coAdministrators -Context $azdoConfig
 
     if (![string]::IsNullOrWhiteSpace($approverUpn)) {
         Write-Message "Action" "Configuring approver '$approverUpn' on environment '$environmentName' (id=$environmentId)"

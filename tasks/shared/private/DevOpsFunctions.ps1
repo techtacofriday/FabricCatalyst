@@ -177,16 +177,27 @@ function Get-DevOpsEnvironmentRoleAssignments {
         [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
     )
 
-    $azdoBaseUrl = if ($null -ne $Context) { $Context.AzdoBaseUrl } else { $script:azdoBaseUrl }
+    $azdoBaseUrl      = if ($null -ne $Context) { $Context.AzdoBaseUrl }      else { $script:azdoBaseUrl }
+    $organizationName = if ($null -ne $Context) { $Context.OrganizationName } else { $script:organizationName }
 
     # scopeId is not documented by Microsoft; "distributedtask.environmentreferencerole"
     # is the value used consistently across community tooling for environment security roles.
-    $endPoint = "/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$($ResourceId)?api-version=7.1-preview.1"
+    $endPoint = "/$organizationName/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$($ResourceId)?api-version=7.1-preview.1"
     $response = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBaseUrl -endPoint $endPoint -Context $Context
 
     if ($response.isException -eq $false) {
         $payload = $response.responseObject.Content | ConvertFrom-Json
-        return @(if ($payload.value) { $payload.value } else { @($payload) })
+        # Unary comma prevents PowerShell from unwrapping a single-assignment result back to
+        # a bare object across the return boundary (Count would silently read $null otherwise).
+        return , @(if ($payload.value) { $payload.value } else { @($payload) })
+    }
+    elseif ($response.responseObject.StatusCode -eq 404) {
+        # Not documented by Microsoft either way (the List Role Assignments reference only
+        # shows a 200 response). Observed in practice for an environment that has never had
+        # an explicit Security Role assignment set - only the implicit creator-as-Administrator
+        # access exists. Treated as "no assignments yet" rather than a hard failure.
+        Write-Message "Warning" "No existing role assignments found for resource '$ResourceId' (404); treating as none."
+        return @()
     }
     else {
         throw (APIReturnedError -apiCallResponse $response -intendedAction "listing role assignments for resource '$ResourceId'")
@@ -196,48 +207,45 @@ function Get-DevOpsEnvironmentRoleAssignments {
 function Set-DevOpsEnvironmentAdministrators {
     <#
       .SYNOPSIS
-      Ensures the current caller (SPN/user running this task) and a set of
-      co-administrator UPNs/groups are all Administrators on an Azure DevOps
-      Environment, removing anyone else previously assigned as Administrator.
+      Grants Administrator on an Azure DevOps Environment to a set of
+      co-administrator UPNs/groups.
 
       .DESCRIPTION
-      Full add+remove sync via Compare-RoleAssignments, mirroring the pattern
-      used by Add-WorkspaceUsers in WorkspaceFunctions.ps1. The identity
-      currently running the task is always preserved (and always included in
-      the desired set), so a provisioning run can never remove its own access.
+      Additive only: never removes an existing Administrator. Azure DevOps
+      already grants Administrator to whichever identity creates the
+      environment (that's the exact gap this task exists to close - creators
+      get access automatically, co-admins don't), so there is nothing to
+      preserve here; resolving "who is currently running this task" to an
+      Azure DevOps identity is unreliable for Service Principals (Get-AzContext
+      returns the AAD Application/Client id, but Azure DevOps identities key
+      off the Service Principal Object id - a different, undocumented-to-derive
+      GUID) and isn't needed once removal is off the table.
 
       .PARAMETER EnvironmentId
       Numeric id returned by New-DevOpsEnvironment.
 
-      .PARAMETER CallerIdentifier
-      UPN (interactive user) or AAD Application/Client id (Service Principal)
-      of the identity running this task - typically (Get-AzContext).Account.Id.
-      Resolved the same way as any co-administrator and always preserved, so a
-      provisioning run can never remove its own access.
-
       .PARAMETER CoAdministrators
       Semicolon-separated list of UPNs/group names to grant Administrator on
-      the environment, in addition to the caller. May be empty.
+      the environment. Empty/whitespace is a no-op.
     #>
     param(
         [parameter(Mandatory = $true)]  [int]    $EnvironmentId,
-        [parameter(Mandatory = $true)]  [string] $CallerIdentifier,
         [parameter(Mandatory = $false)] [string] $CoAdministrators = "",
         [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
     )
 
-    $azdoBaseUrl = if ($null -ne $Context) { $Context.AzdoBaseUrl } else { $script:azdoBaseUrl }
-
-    $projectId    = Get-DevOpsProjectId -Context $Context
-    $resourceId   = "$($projectId)_$($EnvironmentId)"
-
-    $callerIdentity = Resolve-DevOpsIdentityId -Identifier $CallerIdentifier -Context $Context
-    if ($null -eq $callerIdentity -or [string]::IsNullOrWhiteSpace($callerIdentity.Id)) {
-        throw "Could not resolve the running identity '$CallerIdentifier' to an Azure DevOps identity."
-    }
-    $currentId = $callerIdentity.Id
-
     $desiredUpns = Resolve-NormalizedUpnList -upnList $CoAdministrators
+    if ($desiredUpns.Count -eq 0) {
+        Write-Message "Info" "No co-administrators provided; leaving environment Administrators unchanged."
+        return
+    }
+
+    $azdoBaseUrl      = if ($null -ne $Context) { $Context.AzdoBaseUrl }      else { $script:azdoBaseUrl }
+    $organizationName = if ($null -ne $Context) { $Context.OrganizationName } else { $script:organizationName }
+
+    $projectId  = Get-DevOpsProjectId -Context $Context
+    $resourceId = "$($projectId)_$($EnvironmentId)"
+
     $resolvedByUpn = @{}
     $failed = @()
     foreach ($upn in $desiredUpns) {
@@ -252,53 +260,37 @@ function Set-DevOpsEnvironmentAdministrators {
     if ($failed.Count -gt 0) {
         Write-Message "Warning" "Could not resolve the following co-administrators: $($failed -join ', ')"
     }
-
-    $targetIds = @(@($resolvedByUpn.Values | ForEach-Object { $_.Id }) + $currentId | Select-Object -Unique)
+    if ($resolvedByUpn.Count -eq 0) {
+        Write-Message "Warning" "No co-administrators could be resolved; leaving environment Administrators unchanged."
+        return
+    }
 
     $existingAssignments = Get-DevOpsEnvironmentRoleAssignments -ResourceId $resourceId -Context $Context
-    $currentAdminAssignments = @($existingAssignments | Where-Object { $_.role.name -eq 'Administrator' })
-    $existingIds = @($currentAdminAssignments | ForEach-Object { $_.identity.id } | Select-Object -Unique)
+    $existingAdminIds = @($existingAssignments | Where-Object { $_.role.name -eq 'Administrator' } | ForEach-Object { $_.identity.id })
 
-    $diff = Compare-RoleAssignments -TargetIds $targetIds -ExistingIds $existingIds -PreservedIds @($currentId)
+    $added = 0
+    foreach ($identity in $resolvedByUpn.Values) {
+        if ($existingAdminIds -contains $identity.Id) {
+            Write-Message "Info" "'$($identity.DisplayName)' is already an Administrator on environment (id=$EnvironmentId)."
+            continue
+        }
 
-    foreach ($id in $diff.ToAdd) {
-        $displayForLog = ($resolvedByUpn.Values | Where-Object { $_.Id -eq $id } | Select-Object -First 1).DisplayName
-        if ([string]::IsNullOrWhiteSpace($displayForLog)) { $displayForLog = $id }
-
-        $assignment = @{ roleName = "Administrator"; userId = $id }
+        $assignment = @{ roleName = "Administrator"; userId = $identity.Id }
         $jsonBody = ConvertTo-Json -InputObject @($assignment) -Depth 6
 
-        $endPoint = "/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$($resourceId)?api-version=7.1-preview.1"
+        $endPoint = "/$organizationName/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$($resourceId)?api-version=7.1-preview.1"
         $addResponse = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBaseUrl -endPoint $endPoint -method "PUT" -body $jsonBody -Context $Context
 
         if ($addResponse.isException -eq $false) {
-            Write-Message "Info" "Added '$displayForLog' as Administrator on environment (id=$EnvironmentId)."
+            Write-Message "Info" "Added '$($identity.DisplayName)' as Administrator on environment (id=$EnvironmentId)."
+            $added++
         }
         else {
-            throw (APIReturnedError -apiCallResponse $addResponse -intendedAction "adding Administrator role assignment for '$displayForLog'")
+            throw (APIReturnedError -apiCallResponse $addResponse -intendedAction "adding Administrator role assignment for '$($identity.DisplayName)'")
         }
     }
 
-    foreach ($id in $diff.ToRemove) {
-        if ($id -eq $currentId) {
-            Write-Message "Info" "Preserving current identity (id '$id') as Administrator."
-            continue
-        }
-        $displayForLog = ($currentAdminAssignments | Where-Object { $_.identity.id -eq $id } | Select-Object -First 1).identity.displayName
-        if ([string]::IsNullOrWhiteSpace($displayForLog)) { $displayForLog = $id }
-
-        $endPoint = "/_apis/securityroles/scopes/distributedtask.environmentreferencerole/roleassignments/resources/$($resourceId)/$($id)?api-version=7.1-preview.1"
-        $removeResponse = Invoke-ApiEndpoint -useRequestHeader "DevOps" -baseUrl $azdoBaseUrl -endPoint $endPoint -method "DELETE" -Context $Context
-
-        if ($removeResponse.isException -eq $false) {
-            Write-Message "Info" "Removed '$displayForLog' from Administrator on environment (id=$EnvironmentId)."
-        }
-        else {
-            throw (APIReturnedError -apiCallResponse $removeResponse -intendedAction "removing Administrator role assignment for '$displayForLog'")
-        }
-    }
-
-    Write-Message "Info" ("Administrator sync complete for environment (id={0}): Added={1}, Removed={2}" -f $EnvironmentId, $diff.ToAdd.Count, $diff.ToRemove.Count)
+    Write-Message "Info" ("Administrator sync complete for environment (id={0}): Added={1}" -f $EnvironmentId, $added)
 }
 
 function Set-DevOpsEnvironmentApprover {

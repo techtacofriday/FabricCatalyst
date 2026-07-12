@@ -62,6 +62,75 @@ Describe 'Resolve-DevOpsIdentityId' {
 }
 
 # =============================================================================
+Describe 'Get-DevOpsEnvironmentRoleAssignments' {
+
+    BeforeAll {
+        Mock Write-Message    { }
+        Mock APIReturnedError { return "mocked API error: $intendedAction" }
+    }
+
+    It 'returns the parsed assignments on success' {
+        Mock Invoke-ApiEndpoint {
+            return [PSCustomObject]@{
+                responseObject = [PSCustomObject]@{ StatusCode = 200; Content = '{"value":[{"role":{"name":"Administrator"},"identity":{"id":"a"}}]}' }
+                isException    = $false
+            }
+        }
+        $result = Get-DevOpsEnvironmentRoleAssignments -ResourceId 'proj-guid_1'
+        $result.Count | Should -Be 1
+        $result[0].identity.id | Should -Be 'a'
+    }
+
+    It 'includes the organization name in the Security Roles URL (regression: endpoint must not be host-relative)' {
+        Mock Invoke-ApiEndpoint {
+            return [PSCustomObject]@{
+                responseObject = [PSCustomObject]@{ StatusCode = 200; Content = '{"value":[]}' }
+                isException    = $false
+            }
+        }
+        $context = New-AzdoConfig -AzdoBaseUrl 'https://dev.azure.com' -OrganizationName 'contoso'
+        Get-DevOpsEnvironmentRoleAssignments -ResourceId 'proj-guid_1' -Context $context | Out-Null
+        Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $endPoint -like '/contoso/_apis/securityroles/*' }
+    }
+
+    Context '404 - environment has never had an explicit role assignment set' {
+        BeforeEach {
+            Mock Invoke-ApiEndpoint {
+                return [PSCustomObject]@{
+                    responseObject = [PSCustomObject]@{ StatusCode = 404; Message = 'Not Found'; Body = '' }
+                    isException    = $true
+                }
+            }
+        }
+
+        It 'returns an empty array instead of throwing' {
+            { Get-DevOpsEnvironmentRoleAssignments -ResourceId 'proj-guid_1' } | Should -Not -Throw
+            (Get-DevOpsEnvironmentRoleAssignments -ResourceId 'proj-guid_1').Count | Should -Be 0
+        }
+
+        It 'logs a Warning rather than silently swallowing the 404' {
+            Get-DevOpsEnvironmentRoleAssignments -ResourceId 'proj-guid_1' | Out-Null
+            Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
+        }
+    }
+
+    Context 'any other error status' {
+        BeforeEach {
+            Mock Invoke-ApiEndpoint {
+                return [PSCustomObject]@{
+                    responseObject = [PSCustomObject]@{ StatusCode = 500; Message = 'boom'; Body = '' }
+                    isException    = $true
+                }
+            }
+        }
+
+        It 'still throws' {
+            { Get-DevOpsEnvironmentRoleAssignments -ResourceId 'proj-guid_1' } | Should -Throw
+        }
+    }
+}
+
+# =============================================================================
 Describe 'Set-DevOpsEnvironmentAdministrators' {
 
     BeforeAll {
@@ -70,10 +139,30 @@ Describe 'Set-DevOpsEnvironmentAdministrators' {
         Mock Get-DevOpsProjectId { return 'project-guid-1' }
     }
 
-    Context 'caller is not yet an Administrator and no co-administrators are provided' {
+    Context 'no co-administrators provided' {
+        It 'returns immediately without calling the API' {
+            Mock Invoke-ApiEndpoint { }
+            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CoAdministrators '' -Context $null
+            Should -Invoke Invoke-ApiEndpoint -Times 0
+        }
+    }
+
+    Context 'co-administrator cannot be resolved to an Azure DevOps identity' {
+        BeforeEach {
+            Mock Resolve-DevOpsIdentityId { return $null }
+        }
+
+        It 'warns and leaves Administrators unchanged rather than throwing' {
+            { Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CoAdministrators 'ghost@contoso.com' -Context $null } |
+                Should -Not -Throw
+            Should -Invoke Write-Message -ParameterFilter { $msgType -eq 'Warning' }
+        }
+    }
+
+    Context 'co-administrator is not yet an Administrator' {
         BeforeEach {
             Mock Resolve-DevOpsIdentityId {
-                return [PSCustomObject]@{ Id = 'caller-guid-1'; DisplayName = 'Caller' }
+                return [PSCustomObject]@{ Id = 'coadmin-guid-1'; DisplayName = 'Co Admin' }
             }
             Mock Get-DevOpsEnvironmentRoleAssignments { return @() }
             Mock Invoke-ApiEndpoint {
@@ -84,64 +173,32 @@ Describe 'Set-DevOpsEnvironmentAdministrators' {
             }
         }
 
-        It 'adds the caller as Administrator' {
-            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CallerIdentifier 'caller@contoso.com' -CoAdministrators '' -Context $null
+        It 'adds the co-administrator' {
+            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CoAdministrators 'coadmin@contoso.com' -Context $null
             Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'PUT' } -Times 1
         }
-    }
 
-    Context 'caller cannot be resolved to an Azure DevOps identity' {
-        BeforeEach {
-            Mock Resolve-DevOpsIdentityId { return $null }
-        }
-
-        It 'throws rather than silently skipping the sync' {
-            { Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CallerIdentifier 'ghost@contoso.com' -CoAdministrators '' -Context $null } |
-                Should -Throw
-        }
-    }
-
-    Context 'caller is already an Administrator and is omitted from the co-administrators list (regression: caller must never be removed)' {
-        BeforeEach {
-            Mock Resolve-DevOpsIdentityId {
-                return [PSCustomObject]@{ Id = 'caller-guid-1'; DisplayName = 'Caller' }
-            }
-            Mock Get-DevOpsEnvironmentRoleAssignments {
-                return @(
-                    [PSCustomObject]@{ role = [PSCustomObject]@{ name = 'Administrator' }; identity = [PSCustomObject]@{ id = 'caller-guid-1'; displayName = 'Caller' } }
-                )
-            }
-            Mock Invoke-ApiEndpoint {
-                return [PSCustomObject]@{
-                    responseObject = [PSCustomObject]@{ StatusCode = 200; Content = '{}' }
-                    isException    = $false
-                }
-            }
-        }
-
-        It 'does not remove the caller' {
-            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CallerIdentifier 'caller@contoso.com' -CoAdministrators '' -Context $null
+        It 'never calls DELETE (additive only)' {
+            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CoAdministrators 'coadmin@contoso.com' -Context $null
             Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'DELETE' } -Times 0
         }
 
-        It 'does not re-add the caller (already present)' {
-            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CallerIdentifier 'caller@contoso.com' -CoAdministrators '' -Context $null
-            Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'PUT' } -Times 0
+        It 'includes the organization name in the Security Roles URL (regression: endpoint must not be host-relative)' {
+            $context = New-AzdoConfig -AzdoBaseUrl 'https://dev.azure.com' -OrganizationName 'contoso' -ProjectName 'proj'
+            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CoAdministrators 'coadmin@contoso.com' -Context $context
+            Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'PUT' -and $endPoint -like '/contoso/_apis/securityroles/*' } -Times 1
         }
     }
 
-    Context 'a co-administrator is added and a stale Administrator (not the caller) is removed' {
+    Context 'co-administrator is already an Administrator, and an unrelated existing Administrator is present' {
         BeforeEach {
             Mock Resolve-DevOpsIdentityId {
-                if ($Identifier -eq 'caller@contoso.com') {
-                    return [PSCustomObject]@{ Id = 'caller-guid-1'; DisplayName = 'Caller' }
-                }
                 return [PSCustomObject]@{ Id = 'coadmin-guid-1'; DisplayName = 'Co Admin' }
             }
             Mock Get-DevOpsEnvironmentRoleAssignments {
                 return @(
-                    [PSCustomObject]@{ role = [PSCustomObject]@{ name = 'Administrator' }; identity = [PSCustomObject]@{ id = 'caller-guid-1'; displayName = 'Caller' } },
-                    [PSCustomObject]@{ role = [PSCustomObject]@{ name = 'Administrator' }; identity = [PSCustomObject]@{ id = 'stale-guid-1'; displayName = 'Stale Admin' } }
+                    [PSCustomObject]@{ role = [PSCustomObject]@{ name = 'Administrator' }; identity = [PSCustomObject]@{ id = 'coadmin-guid-1'; displayName = 'Co Admin' } },
+                    [PSCustomObject]@{ role = [PSCustomObject]@{ name = 'Administrator' }; identity = [PSCustomObject]@{ id = 'creator-guid-1'; displayName = 'Creator' } }
                 )
             }
             Mock Invoke-ApiEndpoint {
@@ -152,19 +209,14 @@ Describe 'Set-DevOpsEnvironmentAdministrators' {
             }
         }
 
-        It 'adds the co-administrator' {
-            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CallerIdentifier 'caller@contoso.com' -CoAdministrators 'coadmin@contoso.com' -Context $null
-            Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'PUT' } -Times 1
+        It 'does not re-add the co-administrator' {
+            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CoAdministrators 'coadmin@contoso.com' -Context $null
+            Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'PUT' } -Times 0
         }
 
-        It 'removes the stale administrator' {
-            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CallerIdentifier 'caller@contoso.com' -CoAdministrators 'coadmin@contoso.com' -Context $null
-            Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'DELETE' -and $endPoint -like '*/stale-guid-1*' } -Times 1
-        }
-
-        It 'never removes the caller even though a removal happens' {
-            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CallerIdentifier 'caller@contoso.com' -CoAdministrators 'coadmin@contoso.com' -Context $null
-            Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'DELETE' -and $endPoint -like '*caller-guid-1*' } -Times 0
+        It 'never touches the unrelated existing administrator (e.g. the environment creator)' {
+            Set-DevOpsEnvironmentAdministrators -EnvironmentId 42 -CoAdministrators 'coadmin@contoso.com' -Context $null
+            Should -Invoke Invoke-ApiEndpoint -ParameterFilter { $method -eq 'DELETE' } -Times 0
         }
     }
 }
