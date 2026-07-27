@@ -1,0 +1,9 @@
+{
+    "name": "fabriccatalyst-addazdoenv",
+    "version": "1.0.0",
+    "description": "FabricCatalyst Add Azure DevOps Environment task",
+    "main": "index.js",
+    "dependencies": {
+        "azure-pipelines-task-lib": "^5.2.10"
+    }
+}

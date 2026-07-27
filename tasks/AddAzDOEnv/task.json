@@ -1,0 +1,110 @@
+{
+    "id": "4f94603c-73e3-4c1c-b3e3-620257fba161",
+    "name": "FabricCatalystAddAzDOEnv",
+    "friendlyName": "FabricCatalyst - Add Azure DevOps Environment",
+    "description": "Creates an Azure DevOps Environment (if missing), syncs its Administrators (the running identity plus a configurable set of co-administrators), and optionally configures a single approver check.",
+    "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
+    "category": "Deploy",
+    "visibility": [
+        "Build",
+        "Release"
+    ],
+    "author": "TechTacoFriday",
+    "version": {
+        "Major": 1,
+        "Minor": 0,
+        "Patch": 0
+    },
+    "instanceNameFormat": "FabricCatalyst Add Azure DevOps Environment $(environmentName)",
+    "groups": [
+        {
+            "name": "target",
+            "displayName": "Target",
+            "isExpanded": true
+        },
+        {
+            "name": "security",
+            "displayName": "Security",
+            "isExpanded": true
+        },
+        {
+            "name": "advanced",
+            "displayName": "Advanced",
+            "isExpanded": false
+        }
+    ],
+    "inputs": [
+        {
+            "name": "azureSubscription",
+            "type": "connectedService:AzureRM",
+            "label": "Azure Subscription",
+            "required": true,
+            "helpMarkDown": "Azure service connection used to obtain a token for the Azure DevOps REST API."
+        },
+        {
+            "name": "organizationName",
+            "type": "string",
+            "label": "Azure DevOps Organization",
+            "required": true,
+            "groupName": "target",
+            "helpMarkDown": "Azure DevOps organization name (the part after dev.azure.com/)."
+        },
+        {
+            "name": "projectName",
+            "type": "string",
+            "label": "Azure DevOps Project",
+            "required": true,
+            "groupName": "target",
+            "helpMarkDown": "Azure DevOps project in which the environment will be created."
+        },
+        {
+            "name": "environmentName",
+            "type": "string",
+            "label": "Environment Name",
+            "required": true,
+            "groupName": "target",
+            "helpMarkDown": "Name of the Azure DevOps Environment to create (no-op if it already exists)."
+        },
+        {
+            "name": "description",
+            "type": "string",
+            "label": "Description",
+            "required": false,
+            "groupName": "target",
+            "helpMarkDown": "Optional description for the environment. Only used when the environment is first created."
+        },
+        {
+            "name": "coAdministrators",
+            "type": "string",
+            "label": "Co-Administrators",
+            "required": false,
+            "groupName": "security",
+            "helpMarkDown": "Semicolon-separated list of UPNs/group names to grant Administrator on the environment. Additive only - existing Administrators (including whoever creates the environment, which Azure DevOps assigns automatically) are never removed."
+        },
+        {
+            "name": "approverUpn",
+            "type": "string",
+            "label": "Approver",
+            "required": false,
+            "groupName": "security",
+            "helpMarkDown": "UPN or group name required to approve deployments to this environment. Leave empty to skip approval configuration. Has no effect if the environment already has an approval check configured."
+        },
+        {
+            "name": "enableDiagnostics",
+            "type": "boolean",
+            "label": "Enable Diagnostics",
+            "required": false,
+            "defaultValue": "false",
+            "groupName": "advanced",
+            "helpMarkDown": "Outputs detailed diagnostic messages to the pipeline log."
+        }
+    ],
+    "execution": {
+        "Node20": {
+            "target": "index.js"
+        },
+        "Node16": {
+            "target": "index.js"
+        }
+    }
+}
