@@ -15,6 +15,7 @@ param
     [parameter(Mandatory = $false)] [String] $fabricGitConnectionName,
     [parameter(Mandatory = $false)] [String] $workspaceName,
     [parameter(Mandatory = $false)] [String] $semanticModelsBinding = "[]",
+    [parameter(Mandatory = $false)] [String] $schedulesBinding = "[]",
     [parameter(Mandatory = $false)] [String] $postDeploymentFolder = "post-deployment",
     [parameter(Mandatory = $false)] [int]    $notebookMaxAttempts = 12,
     [parameter(Mandatory = $false)]
@@ -130,8 +131,95 @@ try {
         Write-Message "Info" "No bindings provided, skipping binding and continue."
     }
 
-    #3. CONFIGURE ROW LEVEL SECURITY
-    # Run all notebooks and stop on first failure
+    #3. SET SCHEDULE STATE
+    if ($schedulesBinding -and $schedulesBinding -ne "[]") {
+        $parsedSchedules = $schedulesBinding | ConvertFrom-Json
+
+        # Split explicit mappings from the catch-all wildcard entries (itemName = '*').
+        # A wildcard entry may carry an itemType to scope it (e.g. all DataPipelines);
+        # at most one scoped wildcard per itemType, and at most one untyped (global) wildcard.
+        $specificSchedules = @($parsedSchedules | Where-Object { $_.itemName -ne '*' })
+        $wildcardSchedules = @($parsedSchedules | Where-Object { $_.itemName -eq '*' })
+        $handledItemNames  = [System.Collections.Generic.HashSet[string]]::new([System.StringComparer]::OrdinalIgnoreCase)
+
+        $allWorkspaceItems = Get-FabricItems -workspaceId $workspace.id
+
+        foreach ($schedule in $specificSchedules) {
+            if (-not ($schedule.itemName -and $schedule.status)) {
+                $errorMessage = "schedulesBinding entry is missing itemName or status: $($schedule)"
+                Write-Message "Error" $errorMessage
+                throw $errorMessage
+            }
+            if ($schedule.status -notin @('ON', 'OFF')) {
+                $errorMessage = "schedulesBinding entry for '$($schedule.itemName)' has invalid status '$($schedule.status)'. Expected 'ON' or 'OFF'."
+                Write-Message "Error" $errorMessage
+                throw $errorMessage
+            }
+            $candidates = @($allWorkspaceItems | Where-Object { $_.displayName -eq $schedule.itemName })
+            if ($schedule.itemType) {
+                $candidates = @($candidates | Where-Object { $_.type -eq $schedule.itemType })
+            }
+            $item = $candidates | Select-Object -First 1
+            if ($null -eq $item) {
+                $typeSuffix = if ($schedule.itemType) { " of type '$($schedule.itemType)'" } else { "" }
+                $errorMessage = "Item '$($schedule.itemName)'$typeSuffix referenced in schedulesBinding was not found in workspace '$workspaceName'"
+                Write-Message "Error" $errorMessage
+                throw $errorMessage
+            }
+            $jobType = ConvertTo-FabricScheduleJobType -ItemType $item.type
+            if ($null -eq $jobType) {
+                $errorMessage = "Item '$($schedule.itemName)' is of type '$($item.type)', which does not support scheduling."
+                Write-Message "Error" $errorMessage
+                throw $errorMessage
+            }
+            Set-FabricItemSchedulesStatus -workspaceId $workspace.id -itemId $item.id -itemName $item.displayName -jobType $jobType -enabled ($schedule.status -eq 'ON')
+            $handledItemNames.Add($item.displayName) | Out-Null
+        }
+
+        if ($wildcardSchedules.Count -gt 0) {
+            $scopedWildcards = @{}
+            $globalWildcard  = $null
+            foreach ($wildcardSchedule in $wildcardSchedules) {
+                if ($wildcardSchedule.status -notin @('ON', 'OFF')) {
+                    $errorMessage = "Wildcard schedulesBinding entry ('*'$(if ($wildcardSchedule.itemType) { " itemType='$($wildcardSchedule.itemType)'" })) has invalid status '$($wildcardSchedule.status)'. Expected 'ON' or 'OFF'."
+                    Write-Message "Error" $errorMessage
+                    throw $errorMessage
+                }
+                if ($wildcardSchedule.itemType) {
+                    if ($scopedWildcards.ContainsKey($wildcardSchedule.itemType)) {
+                        $errorMessage = "Duplicate wildcard schedulesBinding entry for itemType '$($wildcardSchedule.itemType)'."
+                        Write-Message "Error" $errorMessage
+                        throw $errorMessage
+                    }
+                    $scopedWildcards[$wildcardSchedule.itemType] = $wildcardSchedule
+                }
+                else {
+                    if ($null -ne $globalWildcard) {
+                        $errorMessage = "Duplicate untyped (global) wildcard schedulesBinding entry ('*' with no itemType)."
+                        Write-Message "Error" $errorMessage
+                        throw $errorMessage
+                    }
+                    $globalWildcard = $wildcardSchedule
+                }
+            }
+
+            foreach ($item in $allWorkspaceItems) {
+                if ($handledItemNames.Contains($item.displayName)) { continue }
+                $jobType = ConvertTo-FabricScheduleJobType -ItemType $item.type
+                if ($null -eq $jobType) { continue }
+                $applicableWildcard = if ($scopedWildcards.ContainsKey($item.type)) { $scopedWildcards[$item.type] } else { $globalWildcard }
+                if ($null -eq $applicableWildcard) { continue }
+                Write-Message "Info" "Wildcard schedule binding: applying '$($applicableWildcard.status)' to '$($item.displayName)' (type=$($item.type))."
+                Set-FabricItemSchedulesStatus -workspaceId $workspace.id -itemId $item.id -itemName $item.displayName -jobType $jobType -enabled ($applicableWildcard.status -eq 'ON')
+            }
+        }
+    }
+    else {
+        Write-Message "Info" "No schedulesBinding provided, skipping schedule state changes."
+    }
+
+    #4. RUN ALL NOTEBOOKS
+    # stop on first failure
     $folderId = Get-FabricFolder -workspaceId $workspace.id -displayName $script:postDeploymentFolder
     if (-not [string]::IsNullOrWhiteSpace($folderId)) {
         $items = Get-FabricItemsByFolder -workspaceId $workspace.id -type "Notebook" -rootFolderId $folderId

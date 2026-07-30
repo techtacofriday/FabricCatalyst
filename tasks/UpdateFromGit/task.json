@@ -2,7 +2,7 @@
     "id": "b5e4d3c2-a1f0-4e9d-8b7c-6a5f4e3d2c1b",
     "name": "FabricCatalystUpdateFromGit",
     "friendlyName": "FabricCatalyst - Update From Git",
-    "description": "Syncs a Fabric workspace from its connected Git branch, optionally binds semantic models to connections, and runs post-sync notebooks (e.g. row-level security setup).",
+    "description": "Syncs a Fabric workspace from its connected Git branch, optionally binds semantic models to connections, toggles item schedules on or off, and runs post-sync notebooks (e.g. row-level security setup).",
     "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
     "category": "Deploy",
     "visibility": [
@@ -12,7 +12,7 @@
     "author": "TechTacoFriday",
     "version": {
         "Major": 1,
-        "Minor": 3,
+        "Minor": 4,
         "Patch": 0
     },
     "instanceNameFormat": "FabricCatalyst Update From Git $(workspaceName)",
@@ -25,6 +25,11 @@
         {
             "name": "models",
             "displayName": "Semantic Model Bindings",
+            "isExpanded": false
+        },
+        {
+            "name": "schedules",
+            "displayName": "Schedule Bindings",
             "isExpanded": false
         },
         {
@@ -70,6 +75,15 @@
             "defaultValue": "[]",
             "groupName": "models",
             "helpMarkDown": "JSON array mapping model names to connection names. Use '*' as a wildcard to bind all remaining models to a connection. Example: [{\"modelName\":\"*\",\"cnnName\":\"my-connection\"}]"
+        },
+        {
+            "name": "schedulesBinding",
+            "type": "string",
+            "label": "Schedule Bindings",
+            "required": false,
+            "defaultValue": "[]",
+            "groupName": "schedules",
+            "helpMarkDown": "JSON array turning existing item schedules (git-synced .schedules files) ON or OFF by item name. Use '*' as itemName to apply a status to all remaining schedulable items; add itemType (e.g. 'DataPipeline', 'Notebook') to scope a wildcard to just that item type. At most one untyped wildcard and one wildcard per itemType are allowed. Example: [{\"itemType\":\"DataPipeline\",\"itemName\":\"*\",\"status\":\"ON\"},{\"itemType\":\"Notebook\",\"itemName\":\"nb_some-notebook\",\"status\":\"ON\"}]. Typically set per environment (e.g. ON only in prod) rather than at queue time."
         },
         {
             "name": "postDeploymentFolder",

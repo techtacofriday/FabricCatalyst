@@ -164,6 +164,25 @@ Describe 'Compare-RoleAssignments' {
 }
 
 # =============================================================================
+Describe 'ConvertTo-FabricScheduleJobType' {
+
+    Context 'confirmed mappings' {
+        It 'maps DataPipeline to Execute' {
+            ConvertTo-FabricScheduleJobType -ItemType 'DataPipeline' | Should -Be 'Execute'
+        }
+        It 'maps Notebook to RunNotebook' {
+            ConvertTo-FabricScheduleJobType -ItemType 'Notebook' | Should -Be 'RunNotebook'
+        }
+    }
+
+    Context 'unsupported item types' {
+        It 'returns null for a type with no confirmed jobType' {
+            ConvertTo-FabricScheduleJobType -ItemType 'Lakehouse' | Should -BeNullOrEmpty
+        }
+    }
+}
+
+# =============================================================================
 Describe 'Invoke-TokenSubstitution' {
 
     BeforeAll {

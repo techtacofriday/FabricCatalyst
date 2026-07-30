@@ -999,7 +999,20 @@ function Initialize-AuthContext {
 
 }
 
+function ConvertTo-FabricScheduleJobType {
+    # Job Scheduler jobType path segment per item type. Only add an entry once the value has
+    # been confirmed (either against a live tenant's .schedules file or an existing API call in
+    # this codebase) - a wrong guess here causes confusing 400s from the Job Scheduler API.
+    param (
+        [Parameter(Mandatory = $true)] [string] $ItemType
+    )
+    switch ($ItemType) {
+        'DataPipeline' { return 'Execute' }     # confirmed via git-synced .schedules file
         'Notebook'     { return 'RunNotebook' } # confirmed via Invoke-FabricNotebook's on-demand run call
+        default        { return $null }
+    }
+}
+
 function ConvertTo-FabricItemSegment {
     param (
         [Parameter(Mandatory = $true)] [string] $ItemType
