@@ -999,6 +999,7 @@ function Initialize-AuthContext {
 
 }
 
+        'Notebook'     { return 'RunNotebook' } # confirmed via Invoke-FabricNotebook's on-demand run call
 function ConvertTo-FabricItemSegment {
     param (
         [Parameter(Mandatory = $true)] [string] $ItemType
