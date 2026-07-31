@@ -208,6 +208,138 @@ function Set-SemanticModelConnection {
     }
 }
 
+function Get-FabricItemSchedules {
+    <#
+      GET /workspaces/{workspaceId}/items/{itemId}/jobs/{jobType}/schedules
+      An item can have at most 20 schedules, so continuation-token paging is not needed here.
+    #>
+    param (
+        [parameter(Mandatory = $true)]  [String]         $workspaceId,
+        [parameter(Mandatory = $true)]  [String]         $itemId,
+        [parameter(Mandatory = $true)]  [String]         $jobType,
+        [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
+    )
+    try {
+        $endPoint = "/workspaces/$($workspaceId)/items/$($itemId)/jobs/$($jobType)/schedules"
+        $resp = Invoke-ApiEndpoint -endPoint $endPoint -Context $Context
+        if ($resp.responseObject.StatusCode -eq 200) {
+            $json = $resp.responseObject.Content | ConvertFrom-Json
+            return @($json.value)
+        }
+        throw (APIReturnedError -apiCallResponse $resp -intendedAction "listing schedules for item '$($itemId)' (jobType=$($jobType))")
+    }
+    catch {
+        Write-Message "Error" "$(Get-ErrorResponse($_)). Function Get-FabricItemSchedules failed."
+        throw
+    }
+}
+
+function Get-FabricItemSchedule {
+    <#
+      GET /workspaces/{workspaceId}/items/{itemId}/jobs/{jobType}/schedules/{scheduleId}
+    #>
+    param (
+        [parameter(Mandatory = $true)]  [String]         $workspaceId,
+        [parameter(Mandatory = $true)]  [String]         $itemId,
+        [parameter(Mandatory = $true)]  [String]         $jobType,
+        [parameter(Mandatory = $true)]  [String]         $scheduleId,
+        [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
+    )
+    try {
+        $endPoint = "/workspaces/$($workspaceId)/items/$($itemId)/jobs/$($jobType)/schedules/$($scheduleId)"
+        $resp = Invoke-ApiEndpoint -endPoint $endPoint -Context $Context
+        if ($resp.responseObject.StatusCode -eq 200) {
+            return ($resp.responseObject.Content | ConvertFrom-Json)
+        }
+        throw (APIReturnedError -apiCallResponse $resp -intendedAction "fetching schedule '$($scheduleId)' for item '$($itemId)'")
+    }
+    catch {
+        Write-Message "Error" "$(Get-ErrorResponse($_)). Function Get-FabricItemSchedule failed."
+        throw
+    }
+}
+
+function Set-FabricItemScheduleState {
+    <#
+      PATCH /workspaces/{workspaceId}/items/{itemId}/jobs/{jobType}/schedules/{scheduleId}
+      This is a full replace despite the HTTP verb - configuration must be echoed back
+      unchanged when only toggling 'enabled'.
+    #>
+    param (
+        [parameter(Mandatory = $true)]  [String]         $workspaceId,
+        [parameter(Mandatory = $true)]  [String]         $itemId,
+        [parameter(Mandatory = $true)]  [String]         $jobType,
+        [parameter(Mandatory = $true)]  [String]         $scheduleId,
+        [parameter(Mandatory = $true)]  [bool]           $enabled,
+        [parameter(Mandatory = $true)]  [PSCustomObject] $configuration,
+        [parameter(Mandatory = $false)] [PSCustomObject] $executionData = $null,
+        [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
+    )
+    try {
+        $requestBody = @{
+            enabled       = $enabled
+            configuration = $configuration
+        }
+        if ($null -ne $executionData) { $requestBody.executionData = $executionData }
+        $body = $requestBody | ConvertTo-Json -Depth 10
+
+        $endPoint = "/workspaces/$($workspaceId)/items/$($itemId)/jobs/$($jobType)/schedules/$($scheduleId)"
+        $resp = Invoke-ApiEndpoint -endPoint $endPoint -method "PATCH" -body $body -Context $Context
+        if ($resp.isException) {
+            throw (APIReturnedError -apiCallResponse $resp -intendedAction "updating schedule '$($scheduleId)' for item '$($itemId)' to enabled=$($enabled)")
+        }
+    }
+    catch {
+        Write-Message "Error" "$(Get-ErrorResponse($_)). Function Set-FabricItemScheduleState failed."
+        throw
+    }
+}
+
+function Set-FabricItemSchedulesStatus {
+    <#
+      Toggles every existing schedule on an item to the desired enabled state.
+      Does not create schedules - an item with none is warned about and skipped, since
+      schedules are expected to already exist from the git-synced .schedules file.
+    #>
+    param (
+        [parameter(Mandatory = $true)]  [String]         $workspaceId,
+        [parameter(Mandatory = $true)]  [String]         $itemId,
+        [parameter(Mandatory = $true)]  [String]         $itemName,
+        [parameter(Mandatory = $true)]  [String]         $jobType,
+        [parameter(Mandatory = $true)]  [bool]           $enabled,
+        [parameter(Mandatory = $false)] [PSCustomObject] $Context = $null
+    )
+    try {
+        $desiredLabel = if ($enabled) { "ON" } else { "OFF" }
+        $schedules = Get-FabricItemSchedules -workspaceId $workspaceId -itemId $itemId -jobType $jobType -Context $Context
+        if (-not $schedules -or $schedules.Count -eq 0) {
+            Write-Message "Warning" "No schedules found for item '$($itemName)' (jobType=$($jobType)); nothing to toggle."
+            return
+        }
+        foreach ($scheduleSummary in $schedules) {
+            $schedule = Get-FabricItemSchedule -workspaceId $workspaceId -itemId $itemId -jobType $jobType -scheduleId $scheduleSummary.id -Context $Context
+            if ($schedule.enabled -eq $enabled) {
+                Write-Message "Info" "Schedule '$($schedule.id)' on item '$($itemName)' is already $($desiredLabel)."
+                continue
+            }
+            Write-Message "Action" "Setting schedule '$($schedule.id)' on item '$($itemName)' to $($desiredLabel)."
+            Set-FabricItemScheduleState `
+                -workspaceId $workspaceId `
+                -itemId $itemId `
+                -jobType $jobType `
+                -scheduleId $schedule.id `
+                -enabled $enabled `
+                -configuration $schedule.configuration `
+                -executionData $schedule.executionData `
+                -Context $Context | Out-Null
+        }
+    }
+    catch {
+        Write-Message "Error" "$(Get-ErrorResponse($_)). Function Set-FabricItemSchedulesStatus failed."
+        throw
+    }
+}
+
 function New-ItemDefinitionParts {
     param (
         [parameter(Mandatory = $true)]  [string]         $itemName,

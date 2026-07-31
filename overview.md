@@ -95,14 +95,16 @@ The Fabric deployment pipeline must be named `pl_MyProduct`. The task resolves t
   displayName: Sync workspace from Git
   inputs:
     azureSubscription: 'my-devops-service-connection'
-    workspaceName: 'ws_my-awesome-data-product_dev'
-    isWorkspaceGitEnabled: true
+    workspaceName: 'ws_my-awesome-data-product_prod'
     fabricGitConnectionName: 'my-fabric-devops-source-connection'
     semanticModelsBinding: '[{"modelName":"*","cnnName":"my-connection"}]'
+    schedulesBinding: '[{"itemType":"DataPipeline","itemName":"*","status":"ON"},{"itemType":"Notebook","itemName":"nb_some-notebook","status":"ON"}]'
     postDeploymentFolder: 'post-deployment'
 ```
 
-Patches Git credentials, runs `updateFromGit`, binds all semantic models to `my-connection`, then runs every notebook in the `post-deployment` folder.
+Patches Git credentials, runs `updateFromGit`, binds all semantic models to `my-connection`, turns ON the schedule for every remaining Data Pipeline plus the named notebook `nb_some-notebook`, then runs every notebook in the `post-deployment` folder.
+
+`schedulesBinding` is a JSON array that turns existing item schedules (synced from Git as `.schedules` files) ON or OFF by item name. Use `itemName: "*"` as a wildcard to apply a status to all remaining schedulable items; add `itemType` (e.g. `DataPipeline`, `Notebook`) to scope a wildcard to just that item type. At most one untyped wildcard and one wildcard per `itemType` are allowed. This is typically set per environment — e.g. schedules ON only in `prod`, left as `[]` (the default, no-op) elsewhere — rather than at queue time.
 
 ---
 

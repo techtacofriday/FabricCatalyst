@@ -142,14 +142,16 @@ The Fabric deployment pipeline must be named `pl_MyProduct`. The task looks up t
   displayName: Sync workspace from Git
   inputs:
     azureSubscription: 'my-fabric-service-connection'
-    workspaceName: 'ws_MyProduct_dev'
-    isWorkspaceGitEnabled: true
+    workspaceName: 'ws_MyProduct_prod'
     fabricGitConnectionName: 'MyFabricGitConnection'
     semanticModelsBinding: '[{"modelName":"*","cnnName":"my-connection"}]'
-    folderName: 'Vertipaq'
+    schedulesBinding: '[{"itemType":"DataPipeline","itemName":"*","status":"ON"},{"itemType":"Notebook","itemName":"nb_some-notebook","status":"ON"}]'
+    postDeploymentFolder: 'Vertipaq'
 ```
 
-This patches Git credentials on the workspace, triggers an `updateFromGit` sync, binds all semantic models to `my-connection` (wildcard), then runs every notebook in the `Vertipaq` folder.
+This patches Git credentials on the workspace, triggers an `updateFromGit` sync, binds all semantic models to `my-connection` (wildcard), turns ON the schedule for every remaining Data Pipeline plus the named notebook `nb_some-notebook`, then runs every notebook in the `Vertipaq` folder.
+
+`schedulesBinding` turns existing item schedules (synced from Git as `.schedules` files) ON or OFF by item name. Use `itemName: "*"` as a wildcard to apply a status to all remaining schedulable items, optionally scoped to one `itemType` (e.g. `DataPipeline`, `Notebook`); at most one untyped wildcard and one wildcard per `itemType` are allowed. Defaults to `"[]"` (no-op) — typically set per environment, e.g. ON only in `prod`.
 
 **4. Run it**
 
@@ -427,10 +429,11 @@ The `csvData` array inside a definition part provides inline token substitution 
 |---|---|
 | `azureSubscription` | Service connection for SP authentication |
 | `workspaceName` | Full name of the Fabric workspace to sync |
-| `isWorkspaceGitEnabled` | When true, patches Git credentials and triggers an `updateFromGit` sync |
-| `fabricGitConnectionName` | Name of the Fabric Git connection; required when `isWorkspaceGitEnabled` is true |
+| `fabricGitConnectionName` | Name of the Fabric Git connection; required when the workspace is connected to Git |
 | `semanticModelsBinding` | JSON array mapping model names to connection names; use `"*"` as wildcard for all remaining models |
-| `folderName` | Workspace folder containing notebooks to run after the sync (default: `Vertipaq`) |
+| `schedulesBinding` | JSON array turning item schedules ON/OFF by `itemName`; `itemName: "*"` wildcards all remaining schedulable items, optionally scoped by `itemType` |
+| `postDeploymentFolder` | Workspace folder containing notebooks to run after the sync (default: `post-deployment`) |
+| `notebookMaxAttempts` | Max status-check attempts while waiting for a post-deployment notebook to finish (default: `12`) |
 | `enableDiagnostics` | Verbose logging for troubleshooting |
 
 ---

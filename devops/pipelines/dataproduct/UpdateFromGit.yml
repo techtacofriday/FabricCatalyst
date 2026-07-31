@@ -23,6 +23,11 @@ parameters:
   type: string
   default: "[]" 
 
+- name: schedulesBinding
+  displayName: "Schedules Binding"
+  type: string
+  default: "[]" 
+
 - name: postDeploymentFolder
   displayName: "Post-deployment folder"
   type: string
@@ -56,5 +61,6 @@ stages:
                   fabricGitConnectionName: ${{ variables.fabricGitConnectionName }}
                   workspaceName: ${{ parameters.workspaceName }}
                   semanticModelsBinding: ${{ parameters.semanticModelsBinding }}
+                  schedulesBinding: ${{ parameters.schedulesBinding }}
                   postDeploymentFolder: ${{ parameters.postDeploymentFolder }}
                   enableDiagnostics: ${{ parameters.enableDiagnostics }}

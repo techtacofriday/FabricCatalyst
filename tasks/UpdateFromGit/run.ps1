@@ -5,6 +5,7 @@ param()
 $workspaceName          = $env:FC_WORKSPACENAME
 $fabricGitConnectionName = $env:FC_FABRICGITCONNECTIONNAME
 $semanticModelsBinding  = $env:FC_SEMANTICMODELSBINDING
+$schedulesBinding       = $env:FC_SCHEDULESBINDING
 $postDeploymentFolder   = $env:FC_POSTDEPLOYMENTFOLDER
 $enableDiagnostics      = $env:FC_ENABLEDIAGNOSTICS
 $notebookMaxAttempts    = if ($env:FC_NOTEBOOKMAXATTEMPTS) { [int]$env:FC_NOTEBOOKMAXATTEMPTS } else { 12 }
@@ -40,6 +41,7 @@ $params = @{
     workspaceName           = $workspaceName
     fabricGitConnectionName = $fabricGitConnectionName
     semanticModelsBinding   = $semanticModelsBinding
+    schedulesBinding        = $schedulesBinding
     postDeploymentFolder    = $postDeploymentFolder
     enableDiagnostics       = $enableDiagnostics
     notebookMaxAttempts     = $notebookMaxAttempts

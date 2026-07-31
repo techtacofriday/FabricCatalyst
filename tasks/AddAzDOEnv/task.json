@@ -1,7 +1,7 @@
 {
     "id": "4f94603c-73e3-4c1c-b3e3-620257fba161",
     "name": "FabricCatalystAddAzDOEnv",
-    "friendlyName": "FabricCatalyst - Add Azure DevOps Environment",
+    "friendlyName": "FabricCatalyst - Add DevOps Environment",
     "description": "Creates an Azure DevOps Environment (if missing), syncs its Administrators (the running identity plus a configurable set of co-administrators), and optionally configures a single approver check.",
     "helpMarkDown": "See [FabricCatalyst documentation](https://github.com/techtacofriday/FabricCatalyst) for full setup instructions.",
     "category": "Deploy",
