@@ -8,6 +8,7 @@ $semanticModelsBinding  = $env:FC_SEMANTICMODELSBINDING
 $schedulesBinding       = $env:FC_SCHEDULESBINDING
 $postDeploymentFolder   = $env:FC_POSTDEPLOYMENTFOLDER
 $enableDiagnostics      = $env:FC_ENABLEDIAGNOSTICS
+$recursiveScan          = $env:FC_RECURSIVESCAN
 $notebookMaxAttempts    = if ($env:FC_NOTEBOOKMAXATTEMPTS) { [int]$env:FC_NOTEBOOKMAXATTEMPTS } else { 12 }
 #endregion
 
@@ -44,6 +45,7 @@ $params = @{
     schedulesBinding        = $schedulesBinding
     postDeploymentFolder    = $postDeploymentFolder
     enableDiagnostics       = $enableDiagnostics
+    recursiveScan           = $recursiveScan
     notebookMaxAttempts     = $notebookMaxAttempts
 }
 

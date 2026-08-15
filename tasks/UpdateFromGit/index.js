@@ -30,6 +30,7 @@ function run() {
 
         // Boolean inputs (PowerShell expects 'True'/'False')
         env.FC_ENABLEDIAGNOSTICS = tl.getBoolInput('enableDiagnostics', false) ? 'True' : 'False';
+        env.FC_RECURSIVESCAN     = tl.getBoolInput('recursiveScan', false) ? 'True' : 'False';
 
         // Invoke run.ps1
         const script = path.join(__dirname, 'run.ps1');
