@@ -97,6 +97,17 @@ devops/pipelines/fabriccatalyst/dataproduct/deployment/<DataProduct>/<mode>/vari
 
 ---
 
+## Versioning
+
+Two version layers, both must be bumped together whenever a task changes:
+
+1. `tasks/<Task>/task.json` — per-task `Major.Minor.Patch` (only bump tasks that changed)
+2. `vss-extension.json` (line 5, `version`) — the overall extension package version
+
+If a task's version is bumped but `vss-extension.json` is not, the extension cannot be published (marketplace rejects a re-publish at the same package version). Always bump both in the same PR.
+
+---
+
 ## Known issues and improvement backlog
 
 This section tracks the remaining improvements identified in the April 2026 code review, ordered by priority. Update or remove entries as they are implemented.

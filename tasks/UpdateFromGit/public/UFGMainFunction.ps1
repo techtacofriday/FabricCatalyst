@@ -19,6 +19,8 @@ param
     [parameter(Mandatory = $false)] [String] $postDeploymentFolder = "post-deployment",
     [parameter(Mandatory = $false)] [int]    $notebookMaxAttempts = 12,
     [parameter(Mandatory = $false)]
+    [ValidateSet("True", "False")] [String] $recursiveScan = "False",
+    [parameter(Mandatory = $false)]
     [ValidateSet("True", "False")] [String] $enableDiagnostics = "False",
     [parameter(Mandatory = $false)] [Bool] $developerView = $false,
     # Local-run auth - omit when running inside an ADO pipeline (AzurePowerShell@5 handles auth)
@@ -223,6 +225,9 @@ try {
     $folderId = Get-FabricFolder -workspaceId $workspace.id -displayName $script:postDeploymentFolder
     if (-not [string]::IsNullOrWhiteSpace($folderId)) {
         $items = Get-FabricItemsByFolder -workspaceId $workspace.id -type "Notebook" -rootFolderId $folderId
+        if ($recursiveScan -ne "True") {
+            $items = @($items | Where-Object { $_.folderId -eq $folderId })
+        }
         if (-not $items -or $items.Count -eq 0) {
             Write-Message "Info" "No Notebook items found in folder '$($script:postDeploymentFolder)' (id=$folderId). Nothing to run."
         }
