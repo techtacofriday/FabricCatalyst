@@ -5,5 +5,5 @@ variables:
 
   #Azure Key Vault (holds the Personal Access Token used by tfx extension publish)
   keyVaultName: "fabcat-shared-d-kv"
-  extensionPatSecretName: scrt-extension-pat
-  extensionPatSecretVersion: 2b355c58cee64460a7775082dd4f8fd7
+  extensionPatSecretName: scrt-vsts-publish-token
+  extensionPatSecretVersion: f4278e22a73c4f3fb5c19f3c14305833
