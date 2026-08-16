@@ -1,0 +1,9 @@
+variables:
+  #Azure DevOps (azdo) variables
+  azdoServiceConnection: azdo-serviceconnection-arm-d
+  azdoEnvironment: publish_extension
+
+  #Azure Key Vault (holds the Personal Access Token used by tfx extension publish)
+  keyVaultName: "fabcat-shared-d-kv"
+  extensionPatSecretName: scrt-extension-pat
+  extensionPatSecretVersion: 2b355c58cee64460a7775082dd4f8fd7

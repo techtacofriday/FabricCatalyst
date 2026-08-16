@@ -1,0 +1,83 @@
+trigger: none
+
+pool:
+  vmImage: "windows-latest"
+
+stages:
+  - stage: build_stage
+    displayName: Build Stage
+    variables:
+      - template: ./variables/variables-publish.yml
+
+    jobs:
+      - job: package_extension
+        displayName: Package Extension
+        steps:
+          - checkout: self
+
+          - task: TfxInstaller@5
+            displayName: 'Install tfx-cli'
+            inputs:
+              version: 'latest'
+              checkLatest: true
+
+          - task: PowerShell@2
+            displayName: 'tfx extension create'
+            inputs:
+              targetType: 'inline'
+              script: |
+                tfx extension create `
+                  --manifest-globs vss-extension.json `
+                  --output-path "$(Build.ArtifactStagingDirectory)/dist"
+
+          - task: PublishPipelineArtifact@1
+            displayName: 'Publish extension package as a Pipeline Artifact'
+            inputs:
+              artifactName: 'extensionartifact'
+              targetPath: '$(Build.ArtifactStagingDirectory)/dist'
+
+  - stage: publish_stage
+    displayName: Publish Stage
+    dependsOn: build_stage
+    variables:
+      - template: ./variables/variables-publish.yml
+
+    jobs:
+      - deployment: publish_marketplace
+        displayName: Publish to Marketplace
+        environment: ${{ variables.azdoEnvironment }}
+        strategy:
+          runOnce:
+            deploy:
+              steps:
+                - checkout: none
+
+                - task: TfxInstaller@5
+                  displayName: 'Install tfx-cli'
+                  inputs:
+                    version: 'latest'
+                    checkLatest: true
+
+                - task: AzureCLI@2
+                  displayName: 'Fetch the PAT from Key Vault'
+                  inputs:
+                    azureSubscription: '${{ variables.azdoServiceConnection }}'
+                    scriptType: 'pscore'
+                    scriptLocation: 'inlineScript'
+                    inlineScript: |
+                      $secretValue = az keyvault secret show `
+                        --vault-name "${{ variables.keyVaultName }}" `
+                        --name "${{ variables.extensionPatSecretName }}" `
+                        --version "${{ variables.extensionPatSecretVersion }}" `
+                        --query "value" -o tsv
+                      Write-Host "##vso[task.setvariable variable=scrt-extension-pat;issecret=true]$secretValue"
+
+                - task: PowerShell@2
+                  displayName: 'tfx extension publish'
+                  inputs:
+                    targetType: 'inline'
+                    script: |
+                      $vsix = Get-ChildItem -Path "$(Pipeline.Workspace)/extensionartifact" -Filter *.vsix | Select-Object -First 1
+                      tfx extension publish `
+                        --vsix $vsix.FullName `
+                        --token "$(scrt-extension-pat)"
