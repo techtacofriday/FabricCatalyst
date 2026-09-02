@@ -3,8 +3,12 @@
 # Script Name:  PublishMainFunction.ps1
 # Description:  Local fast-track publish: packages the extension with tfx-cli
 #               and publishes it to the Visual Studio Marketplace. The publish
-#               token is read from Azure Key Vault using the caller's own Az
-#               context (interactive sign-in if no context exists yet).
+#               token is read from Azure Key Vault using either the caller's
+#               own Az context (interactive sign-in if no context exists yet)
+#               or, when -servicePrincipalId/-servicePrincipalSecret/-tenantId
+#               are supplied, a Service Principal - useful when your active
+#               interactive session is signed into a different tenant than
+#               the one hosting the Key Vault.
 # Author:       Svenchio - https://techtacofriday.com
 # Project:      https://fabriccatalyst.com
 # Usage:        If executed as a Stand-alone script:
@@ -17,7 +21,8 @@
 #       Install-Module Az.Accounts, Az.KeyVault -Scope CurrentUser
 #   - tfx-cli, which requires Node.js:
 #       npm install -g tfx-cli
-#   - Your account needs "Get" permission on secrets in the target Key Vault.
+#   - Your account (or the Service Principal, if using -servicePrincipalId)
+#     needs "Get" permission on secrets in the target Key Vault.
 ###############################################################################
 param
 (
@@ -32,7 +37,12 @@ param
     # Provide an already-built .vsix to skip 'tfx extension create' and publish it directly
     [parameter(Mandatory = $false)] [String] $vsixPath,
 
-    [parameter(Mandatory = $false)] [String] $tenantId
+    [parameter(Mandatory = $false)] [String] $tenantId,
+
+    # Provide both to authenticate with a Service Principal instead of reusing/interactively
+    # signing in with the caller's own Az context. Required together, and require -tenantId.
+    [parameter(Mandatory = $false)] [String] $servicePrincipalId,
+    [parameter(Mandatory = $false)] [String] $servicePrincipalSecret
 )
 
 $private = "$PSScriptRoot\..\..\tasks\shared\private"
@@ -55,7 +65,19 @@ try {
         throw "Az.KeyVault module was not found. Install it with 'Install-Module Az.Accounts, Az.KeyVault -Scope CurrentUser' and retry."
     }
 
-    if ($null -eq (Get-AzContext -ErrorAction SilentlyContinue)) {
+    if (-not [string]::IsNullOrWhiteSpace($servicePrincipalId) -or -not [string]::IsNullOrWhiteSpace($servicePrincipalSecret)) {
+        if ([string]::IsNullOrWhiteSpace($servicePrincipalId) -or [string]::IsNullOrWhiteSpace($servicePrincipalSecret) -or [string]::IsNullOrWhiteSpace($tenantId)) {
+            throw "-servicePrincipalId, -servicePrincipalSecret and -tenantId must all be supplied together."
+        }
+        # Always connect fresh with the SPN, even if an interactive context already exists for a
+        # different tenant - the Key Vault lives in a specific tenant regardless of what the
+        # caller is currently signed into elsewhere.
+        Write-Message "Action" "Connecting to Azure using Service Principal '$servicePrincipalId' on tenant '$tenantId'"
+        $secureSecret = ConvertTo-SecureString $servicePrincipalSecret -AsPlainText -Force
+        $credential = New-Object System.Management.Automation.PSCredential($servicePrincipalId, $secureSecret)
+        Connect-AzAccount -ServicePrincipal -Credential $credential -Tenant $tenantId | Out-Null
+    }
+    elseif ($null -eq (Get-AzContext -ErrorAction SilentlyContinue)) {
         if (-not [string]::IsNullOrWhiteSpace($tenantId)) {
             Write-Message "Action" "Connecting interactively on tenant '$tenantId'"
             Connect-AzAccount -Tenant $tenantId | Out-Null
