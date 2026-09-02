@@ -188,6 +188,18 @@ function Connect-WorkspaceToGit {
         if ($connectToGitResponse.isException) {
             if ($connectToGitResponse.responseObject.StatusCode -eq 409) {
                 Write-Message "Info" "Workspace is already connected to git."
+                # The connect call (and its embedded myGitCredentials) was rejected by the 409, so this
+                # identity's Git credentials were never configured. Set them explicitly via the dedicated
+                # endpoint, otherwise initializeConnection fails with GitCredentialsNotConfigured.
+                $myGitCredentialsBody = @{
+                    source       = "ConfiguredConnection"
+                    connectionId = $resolvedFabricGitConnectionId
+                } | ConvertTo-Json -Depth 4
+                $myGitCredentialsEndpoint = "/workspaces/$($workspaceId)/git/myGitCredentials" #https://learn.microsoft.com/en-us/rest/api/fabric/core/git/update-my-git-credentials
+                $updateMyGitCredentialsResponse = Invoke-ApiEndpoint -endPoint $myGitCredentialsEndpoint -method "PATCH" -body $myGitCredentialsBody -Context $Context
+                if ($updateMyGitCredentialsResponse.isException) {
+                    throw (APIReturnedError -apiCallResponse $updateMyGitCredentialsResponse -intendedAction "update-my-git-credentials")
+                }
             }
             else {
                 throw (APIReturnedError -apiCallResponse $connectToGitResponse -intendedAction "connect to git")
